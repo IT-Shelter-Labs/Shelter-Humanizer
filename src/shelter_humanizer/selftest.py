@@ -1,13 +1,16 @@
-"""Packaged-app smoke test: no network, no dialogs, explicit receipt file only."""
+"""Packaged-app smoke test: offline, no user interaction, explicit receipt file only."""
 
 import hashlib
 import json
+import tempfile
 import tkinter as tk
 from pathlib import Path
 
 from . import __version__
 from .files import write_text
 from .gui import SAMPLE, App
+from .local_setup import LocalSetup
+from .managed_runtime import ManagedRuntime
 from .service import offline, rewrite
 
 SMOKE_TEXT = (
@@ -25,6 +28,19 @@ def run(path: str) -> int:
         root.withdraw()
         app = App(root, auto_connect=False)
         assert app.depth_key() == "edit"
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = ManagedRuntime(directory)
+            wizard = LocalSetup(root, lambda: app.colors, lambda model, url: None, runtime)
+            default_model = wizard.choice.get()
+            assert default_model == "qwen3.5:4b"
+            assert runtime.selected_model() == "" and runtime.process is None
+            assert not (Path(directory) / "selection.json").exists()
+            wizard.close()
+            runtime.save_model("deepseek-r1:8b-0528-qwen3-q4_K_M")
+            wizard = LocalSetup(root, lambda: app.colors, lambda model, url: None, runtime)
+            assert wizard.choice.get() == "deepseek-r1:8b-0528-qwen3-q4_K_M"
+            wizard.close()
+            runtime.close()
         app.set_source(SAMPLE)
         result = offline(SAMPLE)
         app.show_result(result)
@@ -69,6 +85,8 @@ def run(path: str) -> int:
             post_ai_cleanup=True,
             ai_generation_used=False,
             default_depth=app.depth_key(),
+            default_model=default_model,
+            saved_model_preserved=True,
             ai_system_sha256=synthetic_ai.system_sha256,
         )
         app.close()

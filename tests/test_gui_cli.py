@@ -16,6 +16,7 @@ from shelter_humanizer.cli import main
 from shelter_humanizer.clipboard import read as read_clipboard
 from shelter_humanizer.gui import EDIT_CHOICES, SAMPLE, TELEGRAM_URL, App
 from shelter_humanizer.local_models import PRESETS
+from shelter_humanizer.managed_runtime import ManagedRuntime
 from shelter_humanizer.selftest import SMOKE_TEXT
 from shelter_humanizer.service import compare, offline
 from shelter_humanizer.ui_helpers import shortcut_action
@@ -384,6 +385,68 @@ class GuiTests(unittest.TestCase):
         tip.hide()
         self.assertEqual(self.app.get_text(self.app.source), "Сохранить этот текст")
 
+    def test_first_launch_offers_qwen_without_installing_or_starting_runtime(self):
+        self.app.close()
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = ManagedRuntime(directory)
+            self.root = tk.Tk()
+            self.root.withdraw()
+            with patch("shelter_humanizer.gui.ManagedRuntime", return_value=runtime):
+                self.app = App(self.root)
+            self.root.update()
+            self.assertEqual(self.app.mode.get(), "offline")
+            self.app.setup_local()
+            self.assertEqual(self.app.local_wizard.choice.get(), "qwen3.5:4b")
+            self.assertEqual(runtime.selected_model(), "")
+            self.assertIsNone(runtime.process)
+            self.assertFalse((Path(directory) / "selection.json").exists())
+            self.app.local_wizard.close()
+            self.app.close()
+
+    def test_local_connection_prefills_qwen_and_keeps_explicit_choices(self):
+        from shelter_humanizer.providers import ProviderConfig
+
+        for kind, saved, expected in (
+            ("ollama", "", "qwen3.5:4b"),
+            ("ollama", "deepseek-r1:8b-0528-qwen3-q4_K_M", "deepseek-r1:8b-0528-qwen3-q4_K_M"),
+            ("ollama", "my-custom-model:latest", "my-custom-model:latest"),
+            ("api", "", ""),
+        ):
+            with self.subTest(kind=kind, saved=saved):
+                self.app.configs[kind] = ProviderConfig(
+                    kind=kind,
+                    url="http://localhost:11434" if kind == "ollama" else "https://example.org/v1",
+                    model=saved,
+                )
+                self.app.mode.set(kind)
+                self.app.settings()
+                window = next(
+                    w
+                    for w in self.root.winfo_children()
+                    if isinstance(w, tk.Toplevel) and w is not self.app.review_window
+                )
+                chooser = next(w for w in self.descendants(window) if isinstance(w, ttk.Combobox))
+                try:
+                    self.assertEqual(chooser.get(), expected)
+                    if kind == "ollama":
+                        self.button(window, "Применить").invoke()
+                        self.assertEqual(self.app.configs[kind].model, expected)
+                finally:
+                    if window.winfo_exists():
+                        window.destroy()
+
+    def test_local_setup_restores_saved_deepseek_choice(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = ManagedRuntime(directory)
+            runtime.save_model("deepseek-r1:8b-0528-qwen3-q4_K_M")
+            self.app.runtime = runtime
+            self.app.setup_local()
+            self.assertEqual(self.app.local_wizard.choice.get(), "deepseek-r1:8b-0528-qwen3-q4_K_M")
+            self.assertEqual(runtime.selected_model(), "deepseek-r1:8b-0528-qwen3-q4_K_M")
+            self.assertIsNone(runtime.process)
+            self.app.local_wizard.close()
+            runtime.close()
+
     def test_local_setup_does_not_download_on_open_and_applies_installed_model(self):
         runtime = MagicMock()
         runtime.closed = threading.Event()
@@ -603,7 +666,7 @@ class GuiTests(unittest.TestCase):
         self.app.close()
         runtime = MagicMock()
         runtime.closed = threading.Event()
-        runtime.selected_model.return_value = PRESETS[0].name
+        runtime.selected_model.return_value = "deepseek-r1:8b-0528-qwen3-q4_K_M"
         runtime.process = None
         runtime.start.return_value = "http://127.0.0.1:12345"
         self.root = tk.Tk()
@@ -613,7 +676,7 @@ class GuiTests(unittest.TestCase):
         self.root.update()
         self.wait_for_worker()
         self.assertEqual(self.app.mode.get(), "ollama")
-        self.assertEqual(self.app.configs["ollama"].model, PRESETS[0].name)
+        self.assertEqual(self.app.configs["ollama"].model, "deepseek-r1:8b-0528-qwen3-q4_K_M")
         runtime.install.assert_not_called()
         runtime.start.assert_called_once()
 

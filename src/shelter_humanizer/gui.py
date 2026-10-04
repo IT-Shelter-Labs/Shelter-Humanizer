@@ -16,6 +16,7 @@ from .appearance import PALETTES, configure_styles
 from .clipboard import read as read_clipboard
 from .clipboard import write as write_clipboard
 from .files import read_text, write_report, write_text
+from .local_models import DEFAULT_MODEL
 from .local_setup import LocalSetup
 from .managed_runtime import ManagedRuntime
 from .models import Result, validate_text
@@ -1104,7 +1105,8 @@ class App:
         frame.pack(fill="both", expand=True)
         url, model, key = (
             tk.StringVar(value=config.url),
-            tk.StringVar(value=config.model),
+            # Prefill only the dialog: an unapplied default must not block owned-runtime reconnect.
+            tk.StringVar(value=config.model or (DEFAULT_MODEL if kind == "ollama" else "")),
             tk.StringVar(value=config.key),
         )
         for label, var, hidden in (

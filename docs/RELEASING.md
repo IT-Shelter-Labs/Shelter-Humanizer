@@ -44,9 +44,9 @@ GitHub CLI необязателен, все действия доступны ч
 
 ## Оформление репозитория
 
-Описание About: `AI text editing and hidden Unicode cleanup. Russian-first Windows app with local DeepSeek, Ollama, API and portable skills.`
+Описание About: `AI text editing and hidden Unicode cleanup. Russian-first Windows app with local Qwen, DeepSeek, Ollama, API and portable skills.`
 
-Topics: `humanizer`, `russian-language`, `text-editing`, `unicode`, `deepseek`,
+Topics: `humanizer`, `russian-language`, `text-editing`, `unicode`, `qwen`, `deepseek`,
 `ollama`, `python`, `tkinter`, `agent-skills`, `open-source`.
 
 Включить Issues и Private vulnerability reporting, выбрать MIT, добавить ссылку

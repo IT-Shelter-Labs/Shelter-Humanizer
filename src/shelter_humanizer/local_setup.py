@@ -5,7 +5,7 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from .local_models import PRESETS, DownloadCancelled, pull_model
+from .local_models import DEFAULT_MODEL, PRESETS, DownloadCancelled, pull_model
 from .managed_runtime import CombinedCancel, check_cancel
 from .providers import Client, ProviderConfig
 from .ui_helpers import Tooltip, attach_help, hide_tooltips
@@ -39,7 +39,7 @@ class LocalSetup:
         selected = runtime.selected_model()
         self.choice = tk.StringVar(
             master=window,
-            value=selected if selected in {p.name for p in PRESETS} else PRESETS[0].name,
+            value=selected if selected in {p.name for p in PRESETS} else DEFAULT_MODEL,
         )
         self.model_note = tk.StringVar(master=window)
         self.radios = []

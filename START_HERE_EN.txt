@@ -10,10 +10,10 @@ https://github.com/IT-Shelter-Labs/Shelter-Humanizer/blob/main/README_EN.md
 4. Wait for the download. Then "Улучшить текст" (Improve text).
 5. Review the result on the right -> "Копировать" (Copy) or "Сохранить TXT".
 
-Default model: DeepSeek R1 0528 Qwen3 8B, about 5.2 GB.
-Portable Ollama adds about 1.4 GB. Prefer 24 GB RAM or a suitable GPU.
-This is the compact May 2025 release, not the newest full DeepSeek series.
-Smaller alternatives: Qwen 3.5 4B (3.4 GB, preferably 16 GB RAM),
+Default model: Qwen 3.5 4B (qwen3.5:4b), about 3.4 GB; preferably 16 GB RAM.
+Portable Ollama adds about 1.4 GB. Saved model choices are preserved.
+Alternatives: DeepSeek R1 0528 Qwen3 8B (5.2 GB, preferably 24 GB RAM or a suitable GPU),
+the compact May 2025 release, not the newest full DeepSeek series;
 Qwen 3 1.7B (1.4 GB, preferably 8 GB RAM, lower quality on complex input).
 Qwen 3.5 9B (6.6 GB) is also available. Hardware guidance is approximate.
 Start with short text. Reasoning models can be slow or exceed the 180-second timeout.
@@ -34,6 +34,8 @@ Without AI, only character inspection, cleanup and limited rule-based edits run.
 Good text may remain unchanged. "Проверить текст" inspects without rewriting.
 "Настройки текста" (Text settings) contains optional controls;
 "Проверки и изменения" (Checks and changes) opens diagnostics and comparison.
+Light editing, second AI proofreading, special-space replacement and NFC are on
+by default. Latin-lookalike replacement is optional and off by default.
 
 Recognized unwanted characters are cleaned AFTER AI editing and proofreading,
 including external chat imports. Valid Cyrillic, quotes, dashes, accents and emoji

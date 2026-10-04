@@ -30,10 +30,14 @@ The app also displays meaning-review warnings to check before copying.
 4. Select a model, click **«Установить и включить ИИ» (Install and enable AI)**, confirm, and wait for the download.
 5. Paste the source on the left → **«Улучшить текст»** → review the right pane → **«Копировать» (Copy)**.
 
-**DeepSeek R1 8B is the default model in the installer.** First setup downloads
-portable Ollama (about 1.4 GB) and the model (about 5.2 GB). After setup, local
-editing works without internet. Prefer 24 GB RAM or a suitable GPU. Smaller Qwen
-alternatives are available. Hardware guidance is approximate, not a measured minimum.
+**Qwen 3.5 4B (`qwen3.5:4b`) is the default model in the installer.** After confirmation,
+setup downloads portable Ollama (about 1.4 GB) and the model (about 3.4 GB).
+After setup, local editing works without internet. Prefer 16 GB RAM. Qwen 3 1.7B
+is a smaller option. DeepSeek R1 8B remains available; saved selections are preserved.
+Hardware guidance is approximate, not a measured minimum.
+
+These defaults apply to current `main` after the initial 1.0.0 release. The original
+1.0.0 archive defaults to DeepSeek; the updated build needs a separate release.
 
 Do not want to download a model? **«Обработать в ИИ-чате…» (Process in an AI chat)**
 prepares a task for your existing ChatGPT or another chat. Copy the task and paste
@@ -75,8 +79,8 @@ the current instruction, four local models, blinded machine judgments and study 
 
 | Model | Approximate download | Device guidance |
 | --- | --- | --- |
-| [DeepSeek R1 0528 · Qwen3 8B](https://ollama.com/library/deepseek-r1:8b-0528-qwen3-q4_K_M) | 5.2 GB | Default; preferably 24 GB RAM or a suitable GPU |
-| [Qwen 3.5 4B](https://ollama.com/library/qwen3.5:4b) | 3.4 GB | Smaller download; preferably 16 GB RAM |
+| [Qwen 3.5 4B](https://ollama.com/library/qwen3.5:4b) | 3.4 GB | Default; preferably 16 GB RAM |
+| [DeepSeek R1 0528 · Qwen3 8B](https://ollama.com/library/deepseek-r1:8b-0528-qwen3-q4_K_M) | 5.2 GB | Alternative; preferably 24 GB RAM or a suitable GPU |
 | [Qwen 3 1.7B](https://ollama.com/library/qwen3:1.7b) | 1.4 GB | Short simple texts; preferably 8 GB RAM; quality may be lower |
 | [Qwen 3.5 9B](https://ollama.com/library/qwen3.5:9b) | 6.6 GB | Preferably 24 GB RAM or a suitable GPU |
 
@@ -135,7 +139,7 @@ python -m pip install -e .
 shelter-humanizer analyze examples/post_before.txt -o analysis.json
 shelter-humanizer light examples/post_before.txt -o result.txt
 shelter-humanizer prompt examples/post_before.txt --depth rephrase -o prompt.txt
-shelter-humanizer rewrite examples/post_before.txt --provider ollama --model deepseek-r1:8b-0528-qwen3-q4_K_M --depth rephrase -o result.txt
+shelter-humanizer rewrite examples/post_before.txt --provider ollama --model qwen3.5:4b --depth rephrase -o result.txt
 ```
 
 The last command needs a running Ollama with that model installed. API keys are read
