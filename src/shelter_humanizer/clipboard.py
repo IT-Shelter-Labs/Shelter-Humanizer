@@ -1,10 +1,13 @@
 """Unicode clipboard transport; Tk's STRING conversion can corrupt long Russian text."""
 
+import base64
 import ctypes
 import sys
 import time
 import tkinter as tk
 from ctypes import wintypes
+
+_CUSTOM_UTF8_TYPE = "SHELTER_UTF8_B64"
 
 
 def windows_api():
@@ -46,7 +49,16 @@ def open_windows(widget, user):
 def write(widget, text):
     if sys.platform != "win32":
         widget.clipboard_clear()
-        widget.clipboard_append(text)
+        try:
+            widget.clipboard_append(text, type="UTF8_STRING")
+        except tk.TclError:
+            widget.clipboard_append(text)
+        try:
+            widget.clipboard_append(
+                base64.b64encode(text.encode("utf-8")).decode("ascii"), type=_CUSTOM_UTF8_TYPE
+            )
+        except (tk.TclError, UnicodeError):
+            pass
         return
     # CF_UNICODETEXT owns a movable UTF-16 allocation after successful transfer.
     # Clipboard text cannot represent NUL; do not silently truncate a source.
@@ -79,7 +91,15 @@ def write(widget, text):
 
 def read(widget):
     if sys.platform != "win32":
-        return widget.clipboard_get()
+        try:
+            encoded = widget.clipboard_get(type=_CUSTOM_UTF8_TYPE)
+            return base64.b64decode(encoded.encode("ascii"), validate=True).decode("utf-8")
+        except (tk.TclError, ValueError, UnicodeError):
+            pass
+        try:
+            return widget.clipboard_get(type="UTF8_STRING")
+        except tk.TclError:
+            return widget.clipboard_get()
     user, kernel = windows_api()
     open_windows(widget, user)
     try:
