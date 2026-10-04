@@ -1,0 +1,50 @@
+Shelter Humanizer 1.0.0
+
+Extract the entire ZIP, then open Shelter-Humanizer.exe. Python is not required.
+The desktop interface is in Russian. English documentation:
+https://github.com/IT-Shelter-Labs/Shelter-Humanizer/blob/main/README_EN.md
+
+1. Paste text with Ctrl+V or "Вставить" (Paste), or open a UTF-8 TXT file.
+2. "Выбрать ИИ" (Choose AI) -> "Установить локальный ИИ" (Install local AI).
+3. Select a model -> "Установить и включить ИИ" (Install and enable AI) -> confirm.
+4. Wait for the download. Then "Улучшить текст" (Improve text).
+5. Review the result on the right -> "Копировать" (Copy) or "Сохранить TXT".
+
+Default model: DeepSeek R1 0528 Qwen3 8B, about 5.2 GB.
+Portable Ollama adds about 1.4 GB. Prefer 24 GB RAM or a suitable GPU.
+This is the compact May 2025 release, not the newest full DeepSeek series.
+Smaller alternatives: Qwen 3.5 4B (3.4 GB, preferably 16 GB RAM),
+Qwen 3 1.7B (1.4 GB, preferably 8 GB RAM, lower quality on complex input).
+Qwen 3.5 9B (6.6 GB) is also available. Hardware guidance is approximate.
+Start with short text. Reasoning models can be slow or exceed the 180-second timeout.
+
+Downloads start only after confirmation; weights are not included in the EXE.
+After installation local editing works without internet. The app's own AI process
+closes with the app; an independent Ollama installation is unaffected.
+Files are saved to %LOCALAPPDATA%\ShelterHumanizer\ai. Close the app and delete
+that folder to remove its downloaded models and runtime.
+
+Alternative: "Обработать в ИИ-чате..." (Process in an AI chat) prepares a task
+for your existing chat. Copy it, send it manually, then paste the answer back.
+API mode needs your service's base URL, model ID and key; service fees may apply.
+The selected service receives the full input and style sample. Keys and text
+history are not stored automatically; explicit JSON reports include both texts.
+
+Without AI, only character inspection, cleanup and limited rule-based edits run.
+Good text may remain unchanged. "Проверить текст" inspects without rewriting.
+"Настройки текста" (Text settings) contains optional controls;
+"Проверки и изменения" (Checks and changes) opens diagnostics and comparison.
+
+Recognized unwanted characters are cleaned AFTER AI editing and proofreading,
+including external chat imports. Valid Cyrillic, quotes, dashes, accents and emoji
+are preserved. Quotations, URLs and code are protected from automatic cleanup.
+Check flagged protected content manually. UTF-8 is an encoding, not an AI marker.
+
+Always review meaning and facts. No plagiarism score, authorship detection or
+AI-detector passing guarantee is provided. Light/dark themes are at the top.
+Ctrl+V/C/X/A and undo/redo work with Russian and English keyboard layouts.
+
+The build is unsigned. Windows may show SmartScreen. Verify the source and the
+SHA256 checksum; do not disable protection.
+https://github.com/IT-Shelter-Labs/Shelter-Humanizer
+Telegram: https://t.me/+txLM4MYbMh9lZDli

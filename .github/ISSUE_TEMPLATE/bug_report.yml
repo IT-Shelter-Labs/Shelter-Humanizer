@@ -1,0 +1,38 @@
+name: Ошибка / Bug report
+description: Сообщить о воспроизводимой ошибке без личных данных и ключей.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "Не прикладывайте API-ключи, личные тексты или секреты. Уязвимости — через Security, если доступна приватная отправка. / Never include secrets."
+  - type: input
+    id: version
+    attributes:
+      label: Версия приложения / App version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Система / Operating system
+      placeholder: Windows 11 x64, 16 GB RAM
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Способ обработки и модель / Mode and model
+      placeholder: DeepSeek R1 0528 Qwen3 8B, local Ollama, two passes
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Шаги и короткий нейтральный пример / Steps and neutral sample
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Ожидание и фактический результат / Expected and actual result
+    validations:
+      required: true

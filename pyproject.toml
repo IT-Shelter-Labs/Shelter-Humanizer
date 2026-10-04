@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shelter-humanizer"
+version = "1.0.0"
+description = "Russian text editor with offline Unicode inspection and optional AI rewriting"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "IT Shelter"}]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/IT-Shelter-Labs/Shelter-Humanizer"
+Issues = "https://github.com/IT-Shelter-Labs/Shelter-Humanizer/issues"
+Documentation = "https://github.com/IT-Shelter-Labs/Shelter-Humanizer#readme"
+
+[project.scripts]
+shelter-humanizer = "shelter_humanizer.cli:main"
+
+[project.gui-scripts]
+shelter-humanizer-gui = "shelter_humanizer.gui:launch"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+shelter_humanizer = ["assets/*.png", "assets/*.ico"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

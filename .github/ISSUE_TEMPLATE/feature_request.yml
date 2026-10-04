@@ -1,0 +1,15 @@
+name: Предложение / Feature request
+description: Какую задачу нужно сделать проще?
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Задача и неудобство / Problem
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Предложение и пример использования / Proposed behavior
+    validations:
+      required: true
