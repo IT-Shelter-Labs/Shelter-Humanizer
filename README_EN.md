@@ -10,7 +10,17 @@ preserving the content. Russian is the primary editorial profile. The AI is inst
 to keep the input language; quality in other languages has not been separately evaluated.
 **The desktop interface is currently in Russian.**
 
-![Shelter Humanizer desktop](docs/images/desktop.png)
+![Cybersecurity text edited with local DeepSeek R1 8B: source on the left, result on the right](docs/images/ai-demo-light.png)
+
+An AI editing example using local DeepSeek R1 8B: source on the left, answer on the right.
+The app also displays meaning-review warnings to check before copying.
+
+<details>
+<summary>Dark theme</summary>
+
+![The same AI editing example in the dark theme](docs/images/ai-demo-dark.png)
+
+</details>
 
 ## Quick start on Windows
 
