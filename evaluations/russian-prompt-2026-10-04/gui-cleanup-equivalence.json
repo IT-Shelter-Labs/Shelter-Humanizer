@@ -1,0 +1,12 @@
+{
+  "two_pass_delivered_outputs_checked": 73,
+  "gui_cleanup_differences": [],
+  "options": {
+    "spaces": true,
+    "nfc": true,
+    "confusables": false
+  },
+  "production_user_payloads_equal_frozen_templates": 14,
+  "copied_prompts_equal_frozen_system_and_user": 14,
+  "system_sha256": "2d7a20a3b3917178a5bed75b697d73041291dab04d4018dbfd0040548b078a96"
+}

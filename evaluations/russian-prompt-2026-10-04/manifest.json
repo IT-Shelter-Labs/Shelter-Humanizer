@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "corpus": {
+    "path": "corpus.json",
+    "sha256": "498850e98e02b13eb63d85751d35f7667c79c51b52eeaafe5fc4ab1ab139bc4c"
+  },
+  "templates": {
+    "path": "user-templates.json",
+    "sha256": "8c9f22234cc3f03484e66ff6426d95670e7deba482add52a375ffaaa4627b053"
+  },
+  "systems": {
+    "baseline": {
+      "path": "candidates/baseline.txt",
+      "sha256": "998c9495dd51c57adb7e4449836c19e8ef4ce1ceb5e9df592713621020604cff"
+    },
+    "selected": {
+      "path": "selected.txt",
+      "sha256": "2d7a20a3b3917178a5bed75b697d73041291dab04d4018dbfd0040548b078a96"
+    }
+  },
+  "models": {
+    "qwen3.5:9b": "56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90",
+    "qwen3:1.7b": "8f68893c685c3ddff2aa3fffce2aa60a30bb2da65ca488b61fff134a4d1730e7",
+    "deepseek-r1:8b-0528-qwen3-q4_K_M": "6995872bfe4c521a67b32da386cd21d5c6e819b6e0d62f79f64ec83be99f5763",
+    "qwen3.5:4b": "2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd"
+  },
+  "runtime_version": "0.35.1",
+  "generation": {
+    "qwen3.5:4b": {
+      "options": {
+        "temperature": 0.7,
+        "num_predict": 8192,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "num_ctx": 16384,
+        "presence_penalty": 1.5
+      },
+      "think": false,
+      "stream": false
+    },
+    "qwen3:1.7b": {
+      "options": {
+        "temperature": 0.7,
+        "num_predict": 8192,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "num_ctx": 16384
+      },
+      "think": false,
+      "stream": false
+    },
+    "qwen3.5:9b": {
+      "options": {
+        "temperature": 0.7,
+        "num_predict": 8192,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "num_ctx": 16384,
+        "presence_penalty": 1.5
+      },
+      "think": false,
+      "stream": false
+    },
+    "deepseek-r1:8b-0528-qwen3-q4_K_M": {
+      "options": {
+        "temperature": 0.6,
+        "num_predict": 16384,
+        "top_p": 0.95,
+        "top_k": 0,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "num_ctx": 32768
+      },
+      "think": true,
+      "stream": false
+    }
+  }
+}

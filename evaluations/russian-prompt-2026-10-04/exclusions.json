@@ -1,0 +1,125 @@
+{
+  "reason": "Experimental V1 voice_sample field was not propagated before worker revision. Preserve attempts but exclude from comparative voice/overall quality statistics.",
+  "invalid_records": [
+    {
+      "run": "03-long-development.jsonl",
+      "key": [
+        "qwen3.5:4b",
+        42,
+        "V1",
+        "baseline",
+        false
+      ]
+    },
+    {
+      "run": "03-long-development.jsonl",
+      "key": [
+        "qwen3.5:4b",
+        42,
+        "V1",
+        "compact",
+        false
+      ]
+    },
+    {
+      "run": "03-long-development.jsonl",
+      "key": [
+        "qwen3:1.7b",
+        42,
+        "V1",
+        "baseline",
+        false
+      ]
+    },
+    {
+      "run": "03-long-development.jsonl",
+      "key": [
+        "qwen3:1.7b",
+        42,
+        "V1",
+        "compact",
+        false
+      ]
+    },
+    {
+      "run": "04-refined-development.jsonl",
+      "key": [
+        "qwen3.5:4b",
+        42,
+        "V1",
+        "refined",
+        false
+      ]
+    },
+    {
+      "run": "04-refined-development.jsonl",
+      "key": [
+        "qwen3.5:4b",
+        1701,
+        "V1",
+        "refined",
+        false
+      ]
+    },
+    {
+      "run": "04-refined-development.jsonl",
+      "key": [
+        "qwen3:1.7b",
+        42,
+        "V1",
+        "refined",
+        false
+      ]
+    },
+    {
+      "run": "04-refined-development.jsonl",
+      "key": [
+        "qwen3:1.7b",
+        1701,
+        "V1",
+        "refined",
+        false
+      ]
+    },
+    {
+      "run": "05-development-repeat-baseline.jsonl",
+      "key": [
+        "qwen3.5:4b",
+        1701,
+        "V1",
+        "baseline",
+        false
+      ]
+    },
+    {
+      "run": "05-development-repeat-baseline.jsonl",
+      "key": [
+        "qwen3.5:4b",
+        1701,
+        "V1",
+        "compact",
+        false
+      ]
+    },
+    {
+      "run": "05-development-repeat-baseline.jsonl",
+      "key": [
+        "qwen3:1.7b",
+        1701,
+        "V1",
+        "baseline",
+        false
+      ]
+    },
+    {
+      "run": "05-development-repeat-baseline.jsonl",
+      "key": [
+        "qwen3:1.7b",
+        1701,
+        "V1",
+        "compact",
+        false
+      ]
+    }
+  ]
+}

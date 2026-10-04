@@ -1,0 +1,17 @@
+{
+  "01-pilot-4b.jsonl": "9446f479afa0462ae9da703c27f62a352aeae09ae2888040a6a099e18f4f201d",
+  "02-pilot-small.jsonl": "005448dbd952ad4ab6390b1c24a1b43b7b879b5632f086c425d95f96005892ab",
+  "03-long-development.jsonl": "56e5936abc6cb942193de5525bfe5cf3188760dfaace018cc4c2385a08af77d2",
+  "04-refined-development.jsonl": "44f24debbfb189d099e25836a4e7aa987b237ff908ae1f579e7157a12070203a",
+  "05-development-repeat-baseline.jsonl": "f032f28c8ebf1a532ecea9965249d7f7ce54a49d796d520e1c73004352b13be0",
+  "06-voice-corrected.jsonl": "d8e8503d6384037ed7160b82f8f4acced37c7c22d9caab2ca876c5e8b045bc5d",
+  "07-precise-development.jsonl": "07544c2d69bb1b1507d3aa0e2c019cb11d3ce505fdea04675682734bd9e5553d",
+  "08-large-development.jsonl": "5d1bae79be3abb4bd37b528510ba3f9cbab4f3b89a5e31ea53ddb75faa07ca4d",
+  "09-guided-development.jsonl": "5022d59bd4f4616d48cc1b55b390d72b0d2986886bda699cbcdb2d588b445945",
+  "10-two-pass-development.jsonl": "aa63dede96e95739669ced65395d60997cb68dfe965fbadf223337d963b9dede",
+  "11-large-compact-development.jsonl": "5ee48a09aa0f754eb47cdc7592444dc8eb94ccd714858bd49b5f565cf93c1c4e",
+  "12-precise-two-pass-development.jsonl": "a348dce7793508dd13eae0fcffacd846268217ae8d5a258cfbe83044e9efaade",
+  "13-compact-two-pass-development.jsonl": "f4dd6449e2058b6d22f3df0a7a291e8e8d721eff415287d24b23a68215977680",
+  "14-final-heldout.jsonl": "db82d9c9a0fae8666c4cc8e8e562d78ef348d8cc477169cd3c304c5a0bfc7b4b",
+  "15-heldout-full-workflow.jsonl": "97d93070101ccf87fbf1fa08845673b5dd816ac764ea5c0d3331a36f6674bf10"
+}

@@ -55,9 +55,12 @@ rule-based edits. It does not deeply rewrite text. Good text may remain unchange
 - Light/dark themes, copy beside the result, TXT import/export, explicit JSON reports, and Russian/English keyboard-layout shortcuts.
 
 Advanced controls live in **«Настройки текста» (Text settings)**. Diagnostics are
-under **«Проверки и изменения» (Checks and changes)**. Deep rewriting, a second
+under **«Проверки и изменения» (Checks and changes)**. Light editing, a second
 AI proofreading pass, special-space replacement, and NFC are enabled by default.
 Latin-lookalike replacement is off because it can damage legitimate multilingual text.
+
+The [Russian prompt comparison](docs/PROMPT_EVALUATION_2026-10-04.md) documents
+the current instruction, four local models, blinded machine judgments and study limitations.
 
 ## Processing choices
 

@@ -1,0 +1,27 @@
+{
+  "frozen_prompt_sha256": "2d7a20a3b3917178a5bed75b697d73041291dab04d4018dbfd0040548b078a96",
+  "purpose": "Validate complete two-pass GUI workflow separately; no prompt tuning on heldouts",
+  "job": {
+    "id": "15-heldout-full-workflow",
+    "models": [
+      "qwen3.5:4b",
+      "qwen3:1.7b",
+      "qwen3.5:9b",
+      "deepseek-r1:8b-0528-qwen3-q4_K_M"
+    ],
+    "cases": [
+      "H1",
+      "H2",
+      "H3",
+      "H4"
+    ],
+    "variants": [
+      "baseline",
+      "precise"
+    ],
+    "seeds": [
+      42
+    ],
+    "second_pass": true
+  }
+}

@@ -438,7 +438,12 @@ class GuiTests(unittest.TestCase):
         self.assertTrue(self.app.second_pass.get())
 
     def test_ready_to_use_defaults_keep_script_replacement_optional(self):
-        self.assertEqual(self.app.depth_key(), "rephrase")
+        self.app.set_source("Хороший исходный текст.")
+        with patch.object(self.app, "clipboard", return_value=True):
+            self.assertTrue(self.app.prompt())
+        data = json.loads(self.app.last_chat_prompt.rsplit("\n", 1)[1])
+        self.assertEqual(data["edit_goal"], "Аккуратная редактура")
+        self.assertEqual(data["original"], "Хороший исходный текст.")
         self.assertTrue(self.app.second_pass.get())
         self.assertTrue(self.app.spaces.get())
         self.assertTrue(self.app.nfc.get())

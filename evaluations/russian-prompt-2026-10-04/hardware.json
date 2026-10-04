@@ -1,0 +1,5 @@
+{
+  "gpu": "NVIDIA GeForce RTX 3060",
+  "physical_memory_bytes": 34183348224,
+  "vram_note": "Win32_VideoController AdapterRAM overflows on this card; VRAM not measured"
+}

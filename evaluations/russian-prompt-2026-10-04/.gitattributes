@@ -1,0 +1,4 @@
+# Preserve hashed experiment bytes; archived CRLF is intentional.
+*.json -text whitespace=cr-at-eol
+*.jsonl -text whitespace=cr-at-eol
+*.txt -text whitespace=cr-at-eol

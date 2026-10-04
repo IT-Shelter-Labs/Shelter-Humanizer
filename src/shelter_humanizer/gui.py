@@ -77,7 +77,7 @@ class App:
         self.mode = tk.StringVar(value="offline")
         self.connection_note = tk.StringVar(value="")
         self.genre = tk.StringVar(value=GENRES["plain"])
-        self.depth = tk.StringVar(value=EDIT_CHOICES["rephrase"])
+        self.depth = tk.StringVar(value=EDIT_CHOICES["edit"])
         self.second_pass = tk.BooleanVar(value=True)
         self.spaces = tk.BooleanVar(value=True)
         self.confusables = tk.BooleanVar(value=False)

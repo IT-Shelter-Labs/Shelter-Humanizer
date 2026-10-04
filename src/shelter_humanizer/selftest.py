@@ -1,5 +1,6 @@
 """Packaged-app smoke test: no network, no dialogs, explicit receipt file only."""
 
+import hashlib
 import json
 import tkinter as tk
 from pathlib import Path
@@ -23,6 +24,7 @@ def run(path: str) -> int:
         root = tk.Tk()
         root.withdraw()
         app = App(root, auto_connect=False)
+        assert app.depth_key() == "edit"
         app.set_source(SAMPLE)
         result = offline(SAMPLE)
         app.show_result(result)
@@ -40,10 +42,12 @@ def run(path: str) -> int:
 
         class SyntheticAI:
             def complete(self, messages):
+                self.system_sha256 = hashlib.sha256(messages[0]["content"].encode()).hexdigest()
                 return "Про\u200bверка\u00a0текста. «Точная цитата» 👩‍💻"
 
+        synthetic_ai = SyntheticAI()
         generated = rewrite(
-            "Проверка текста. «Точная цитата» 👩‍💻", SyntheticAI(), second_pass=False
+            "Проверка текста. «Точная цитата» 👩‍💻", synthetic_ai, second_pass=False
         )
         assert generated.text == "Проверка\u00a0текста. «Точная цитата» 👩‍💻"
         assert generated.original == "Проверка текста. «Точная цитата» 👩‍💻"
@@ -64,6 +68,8 @@ def run(path: str) -> int:
             neutral_example_loaded=True,
             post_ai_cleanup=True,
             ai_generation_used=False,
+            default_depth=app.depth_key(),
+            ai_system_sha256=synthetic_ai.system_sha256,
         )
         app.close()
         root = None

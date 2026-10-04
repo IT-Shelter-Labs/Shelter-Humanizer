@@ -1,0 +1,15 @@
+{
+  "variant": "precise",
+  "frozen_at": "2026-10-05T00:56:46.267747+05:00",
+  "system_sha256": "2d7a20a3b3917178a5bed75b697d73041291dab04d4018dbfd0040548b078a96",
+  "system_chars": 1867,
+  "development_summary_sha256": "20e7adeb8fa137df8c6e71484d4c6b0bbeb82f7f10bec07728bfb7db702316a6",
+  "priorities": [
+    "semantic and literal fidelity",
+    "natural Russian",
+    "moderate editing"
+  ],
+  "reason": "Tied best one-pass hard gate28/40; small-model two-seed hard gate32/40 vs compact31/40; two-pass hard gate9/12 vs compact/guided8/12. Editorial one-pass26/40 vs compact27/40 and workflow8/12 tied. Fidelity first, same production sampling and protected checks. Narrow observed differences; no universal winner claim.",
+  "heldout_used_for_selection": false,
+  "further_prompt_revisions": false
+}

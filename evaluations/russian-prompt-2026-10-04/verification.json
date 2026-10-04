@@ -1,0 +1,39 @@
+{
+  "unit_tests": {
+    "count": 144,
+    "skipped": 0,
+    "passed": true
+  },
+  "ruff_check": true,
+  "ruff_format_check": true,
+  "git_diff_check": true,
+  "replay_smoke": {
+    "accepted": true,
+    "exact_frozen_system": true,
+    "exact_frozen_user": true,
+    "exact_pinned_generation_options": true,
+    "exact_pinned_model_digest": true,
+    "equal_delivered_output_on_smoke_case": true,
+    "case": "H1",
+    "model": "qwen3.5:4b",
+    "seed": 42,
+    "variant": "selected",
+    "evidence": "replay-smoke.jsonl"
+  },
+  "worker_owned_runtime_stopped": true,
+  "baseline_replay_smoke": {
+    "accepted": true,
+    "exact_frozen_system": true,
+    "exact_frozen_user": true,
+    "exact_pinned_generation_options": true,
+    "exact_pinned_model_digest": true,
+    "equal_delivered_output_on_smoke_case": true,
+    "case": "H1",
+    "model": "qwen3.5:4b",
+    "seed": 42,
+    "variant": "baseline",
+    "evidence": "replay-baseline-smoke.jsonl"
+  },
+  "system_archives_exact_byte_sha256": true,
+  "baseline_exact_captured_system_count": 140
+}

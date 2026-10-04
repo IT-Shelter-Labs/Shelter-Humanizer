@@ -1,0 +1,23 @@
+{
+  "attempts": 492,
+  "model_calls": 566,
+  "excluded_voice_attempts": 12,
+  "valid_attempts": 480,
+  "timeouts": 1,
+  "heldout_one_pass_consensus": {
+    "baseline": 21,
+    "precise": 41,
+    "attempts_per_variant": 48
+  },
+  "heldout_two_pass_consensus": {
+    "baseline": 8,
+    "precise": 13,
+    "attempts_per_variant": 16
+  },
+  "tests": {
+    "count": 144,
+    "skipped": 0,
+    "passed": true
+  },
+  "frozen_system_sha256": "2d7a20a3b3917178a5bed75b697d73041291dab04d4018dbfd0040548b078a96"
+}

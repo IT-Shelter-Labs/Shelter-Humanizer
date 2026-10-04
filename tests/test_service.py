@@ -197,9 +197,11 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(edit[0], deep[0])
         self.assertNotEqual(deep[0], check[0])
         self.assertIn("Не возвращай старые подводки", check[0]["content"])
-        self.assertIn("Не усиливай и не ослабляй", deep[0]["content"])
-        self.assertIn("Не выравнивай предложения по длине", deep[0]["content"])
-        self.assertIn("НЕ ИМИТИРУЙ ЕСТЕСТВЕННОСТЬ ОШИБКАМИ", deep[0]["content"])
+        for task, goal in ((edit, "Аккуратная редактура"), (deep, "Переформулировать")):
+            self.assertEqual([message["role"] for message in task], ["system", "user"])
+            data = json.loads(task[1]["content"].split("\n", 1)[1])
+            self.assertEqual(data["original"], "Текст")
+            self.assertEqual(data["edit_goal"], goal)
         self.assertNotIn("__SH_", copy_prompt("Текст"))
 
     def test_readable_guards_reject_atom_edits_additions_and_duplicates(self):

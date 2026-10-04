@@ -1,0 +1,32 @@
+{
+  "intent": "Natural Russian and semantic fidelity with moderate editing; unchanged good prose valid",
+  "date": "2026-10-04",
+  "frozen_corpus_sha256": "498850e98e02b13eb63d85751d35f7667c79c51b52eeaafe5fc4ab1ab139bc4c",
+  "tuning_split": [
+    "D1",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "D6",
+    "L1",
+    "L2",
+    "L3",
+    "V1"
+  ],
+  "held_out": [
+    "H1",
+    "H2",
+    "H3",
+    "H4"
+  ],
+  "thinking_and_sampling": "Unchanged application Client.complete settings; reproducibility seed set only in experimental requests",
+  "optimization_stop": "At most three revisions after initial candidates; stop when no justified improvement, never tune on held-out outputs",
+  "holdout_seeds": [
+    42,
+    1701,
+    809
+  ],
+  "judge": "Independent label-blind LLM editor using frozen rubric; second independent review for pilot and heldout; not a human preference study",
+  "selection": "Semantic/format/literal fidelity gates first; then natural Russian, clarity, genre/voice, editorial restraint. Preserve all failed attempts."
+}

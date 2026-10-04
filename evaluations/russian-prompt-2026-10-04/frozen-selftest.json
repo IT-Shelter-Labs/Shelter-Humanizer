@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "ok": true,
+  "network_used": false,
+  "tk": "8.6.12",
+  "source_preserved": true,
+  "unicode_removed": true,
+  "numbers_preserved": true,
+  "emoji_preserved": true,
+  "themes_preserve_text": true,
+  "logo_loaded": true,
+  "neutral_example_loaded": true,
+  "post_ai_cleanup": true,
+  "ai_generation_used": false,
+  "default_depth": "edit",
+  "ai_system_sha256": "2d7a20a3b3917178a5bed75b697d73041291dab04d4018dbfd0040548b078a96"
+}
