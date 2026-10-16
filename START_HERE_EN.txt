@@ -1,4 +1,4 @@
-Shelter Humanizer 1.1.1rc1 · local test build
+Shelter Humanizer 1.1.1
 
 Right-click a text field for copy, paste, cut, delete selection and select all;
 multiline fields also support undo/redo. Shift+F10 opens the same menu.
@@ -6,7 +6,7 @@ For GPU failures, the Ollama connection settings offer optional CPU-only mode.
 It may be slower and does not fix every HTTP 500. Connection checks preserve
 the last generation failure in the diagnostics report.
 
-Upgrading from 1.0.0: close the old app, extract the new ZIP into a separate folder
+Upgrading an earlier version: close the old app, extract the new ZIP into a separate folder
 and launch the new EXE. Downloaded managed models and explicit saved choices are
 reused from the existing data folder. The setup dialog now scrolls and pins its actions.
 
@@ -14,7 +14,7 @@ Optional settings: «Настройки текста» → «Расширенн�
 Add a model by Ollama tag, select an installed model, or import a compatible single
 GGUF. Edit the instruction for this session, opt into saving it, or restore the default.
 Explicit chunking can resume while the app is open. Diagnostics exclude texts/keys.
-See docs/ADVANCED_SETTINGS_RU.md (Russian) and docs/RELEASE_NOTES_1.1.1rc1.md.
+See docs/ADVANCED_SETTINGS_RU.md (Russian) and docs/RELEASE_NOTES_1.1.1.md.
 
 Extract the entire ZIP, then open Shelter-Humanizer.exe. Python is not required.
 The desktop interface is in Russian. English documentation:

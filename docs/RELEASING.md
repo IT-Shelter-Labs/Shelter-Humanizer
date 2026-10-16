@@ -16,20 +16,20 @@
 8. Создать новый черновик релиза с четырьмя файлами, проверить их и опубликовать как Latest.
    Старые теги, релизы и файлы не заменяются. Незавершённые чужие черновики не используются.
 
-## Release 1.1.0 через сайт
+## Release 1.1.1 через сайт
 
-Releases → Draft a new release. Тег `v1.1.0`, Target `main`.
-Заголовок: `Shelter Humanizer 1.1.0`.
-Описание: содержимое [RELEASE_NOTES_1.1.0.md](RELEASE_NOTES_1.1.0.md).
+Releases → Draft a new release. Тег `v1.1.1`, Target `main`.
+Заголовок: `Shelter Humanizer 1.1.1`.
+Описание: содержимое [RELEASE_NOTES_1.1.1.md](RELEASE_NOTES_1.1.1.md).
 Приложить:
 
-- `dist/windows/Shelter-Humanizer-1.1.0-windows-x64.zip`;
+- `dist/windows/Shelter-Humanizer-1.1.1-windows-x64.zip`;
 - `dist/windows/SHA256SUMS.txt`;
-- `dist/skill/Shelter-Humanizer-1.1.0-skill.zip` (дополнительный способ использования);
+- `dist/skill/Shelter-Humanizer-1.1.1-skill.zip` (дополнительный способ использования);
 - `dist/skill/SHA256SUMS-skill.txt`.
 
 Автоматический Source code (zip) не заменяет архив с EXE. Сначала прикрепите все
-файлы и проверьте описание, затем Publish release. Для готового 1.1.0 не отмечайте
+файлы и проверьте описание, затем Publish release. Для готового 1.1.1 не отмечайте
 pre-release; выберите Set as latest release. Если приёмка выявила проблему,
 исправьте её до стабильного выпуска или явно выпускайте отдельный prerelease.
 
@@ -39,8 +39,8 @@ pre-release; выберите Set as latest release. Если приёмка в�
 
 ```powershell
 gh auth login
-gh release create v1.1.0 --repo IT-Shelter-Labs/Shelter-Humanizer --verify-tag --title "Shelter Humanizer 1.1.0" --notes-file docs/RELEASE_NOTES_1.1.0.md --draft dist/windows/Shelter-Humanizer-1.1.0-windows-x64.zip dist/windows/SHA256SUMS.txt dist/skill/Shelter-Humanizer-1.1.0-skill.zip dist/skill/SHA256SUMS-skill.txt
-gh release edit v1.1.0 --repo IT-Shelter-Labs/Shelter-Humanizer --draft=false --latest
+gh release create v1.1.1 --repo IT-Shelter-Labs/Shelter-Humanizer --verify-tag --title "Shelter Humanizer 1.1.1" --notes-file docs/RELEASE_NOTES_1.1.1.md --draft dist/windows/Shelter-Humanizer-1.1.1-windows-x64.zip dist/windows/SHA256SUMS.txt dist/skill/Shelter-Humanizer-1.1.1-skill.zip dist/skill/SHA256SUMS-skill.txt
+gh release edit v1.1.1 --repo IT-Shelter-Labs/Shelter-Humanizer --draft=false --latest
 ```
 
 Последняя команда публикует подготовленный черновик; сначала проверьте его на сайте.

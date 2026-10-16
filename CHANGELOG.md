@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased · 1.1.1rc1
+## 1.1.1 · 2026-10-16
 
 - Right-click / Shift+F10 editing menus in text fields and settings, with selection,
   read-only states and undo/redo handled explicitly.

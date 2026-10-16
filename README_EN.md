@@ -24,7 +24,7 @@ The app also displays meaning-review warnings to check before copying.
 
 ## Quick start on Windows
 
-1. Open [Releases](https://github.com/IT-Shelter-Labs/Shelter-Humanizer/releases/latest). Under **Assets**, download **`Shelter-Humanizer-1.1.0-windows-x64.zip`**.
+1. Open [Releases](https://github.com/IT-Shelter-Labs/Shelter-Humanizer/releases/latest). Under **Assets**, download **`Shelter-Humanizer-1.1.1-windows-x64.zip`**.
 2. Extract the entire ZIP, then open **`Shelter-Humanizer.exe`**. You do not need to install Python.
 3. For AI editing, select **«Выбрать ИИ» (Choose AI) → «Установить локальный ИИ» (Install local AI)**.
 4. Select a model, click **«Установить и включить ИИ» (Install and enable AI)**, confirm, and wait for the download.
@@ -36,16 +36,21 @@ After setup, local editing works without internet. Prefer 16 GB RAM. Qwen 3 1.7B
 is a smaller option. DeepSeek R1 8B remains available; saved selections are preserved.
 Hardware guidance is approximate, not a measured minimum.
 
-**Upgrading from 1.0.0:** close the old app, extract the new ZIP into a separate
+**Upgrading an earlier version:** close the old app, extract the new ZIP into a separate
 folder and launch the new EXE. Managed model downloads and explicit saved choices
 are reused. Setup now scrolls and keeps its confirmation button at the bottom.
-[Changes in 1.1.0](docs/RELEASE_NOTES_1.1.0.md).
+[Changes in 1.1.1](docs/RELEASE_NOTES_1.1.1.md).
 
 Optional features live under **Text settings → Advanced**: custom Ollama tags,
 installed models or a compatible single GGUF, an editable instruction with reset
 and opt-in persistence, explicit document chunking with in-memory resume, and
 diagnostics without text or keys. You can still connect your own Ollama/LM Studio/API.
 See [advanced settings](docs/ADVANCED_SETTINGS_RU.md) (Russian).
+
+Right-click or Shift+F10 opens an editing menu in text fields. Ollama connection
+settings also offer optional CPU-only operation for troubleshooting GPU failures.
+Unknown HTTP 500 causes remain explicitly unknown; connection checks preserve
+the last generation failure in the diagnostic report.
 
 Do not want to download a model? **«Обработать в ИИ-чате…» (Process in an AI chat)**
 prepares a task for your existing ChatGPT or another chat. Copy the task and paste
