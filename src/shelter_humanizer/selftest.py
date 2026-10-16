@@ -68,6 +68,15 @@ def run(path: str) -> int:
         assert "2 000 ₽" in app.get_text(app.output)
         assert "👩‍💻" in app.get_text(app.output)
         assert app.logo.width() > 0
+        menu = app.source.shelter_menu
+        root.tk.call(menu.cget("postcommand"))
+        select_all = next(
+            i
+            for i in range(menu.index("end") + 1)
+            if menu.type(i) == "command" and menu.entrycget(i, "label") == "Выделить всё"
+        )
+        menu.invoke(select_all)
+        assert app.source.get("sel.first", "sel.last") == SMOKE_TEXT
 
         class SyntheticAI:
             def complete(self, messages):
@@ -121,6 +130,8 @@ def run(path: str) -> int:
             instruction_preferences_reset=True,
             build=build_info(),
             diagnostics_version=snapshot()["app_version"],
+            context_menu_loaded=True,
+            cpu_only_opt_in=not app.configs["ollama"].cpu_only,
         )
         app.close()
         root = None

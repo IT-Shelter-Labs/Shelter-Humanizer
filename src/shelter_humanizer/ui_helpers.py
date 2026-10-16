@@ -47,6 +47,14 @@ def edit_action(widget, action):
                 widget.insert("insert", value)
         elif is_text and writable and action in ("undo", "redo"):
             widget.edit_undo() if action == "undo" else widget.edit_redo()
+        elif action == "delete" and writable:
+            if is_text:
+                if widget.tag_ranges("sel"):
+                    widget.edit_separator()
+                    widget.delete("sel.first", "sel.last")
+                    widget.edit_separator()
+            elif widget.selection_present():
+                widget.delete("sel.first", "sel.last")
     except tk.TclError:
         # Empty clipboard/selection and an empty undo stack are normal UI states.
         pass
@@ -114,6 +122,69 @@ def install_shortcuts(root):
 def bind_editing(widget):
     if "ShelterEditing" not in widget.bindtags():
         widget.bindtags(("ShelterEditing",) + widget.bindtags())
+    if hasattr(widget, "shelter_menu"):
+        return
+    menu = widget.shelter_menu = tk.Menu(widget, tearoff=False)
+    entries = {}
+
+    def add(label, action, accelerator=""):
+        entries[action] = menu.index("end") + 1 if menu.index("end") is not None else 0
+        menu.add_command(
+            label=label, accelerator=accelerator, command=lambda: edit_action(widget, action)
+        )
+
+    if isinstance(widget, tk.Text):
+        add("Отменить", "undo", "Ctrl+Z")
+        add("Повторить", "redo", "Ctrl+Y")
+        menu.add_separator()
+    add("Вырезать", "cut", "Ctrl+X")
+    add("Копировать", "copy", "Ctrl+C")
+    add("Вставить", "paste", "Ctrl+V")
+    add("Удалить выделенное", "delete")
+    menu.add_separator()
+    add("Выделить всё", "all", "Ctrl+A")
+
+    def update_menu():
+        is_text = isinstance(widget, tk.Text)
+        writable = str(widget.cget("state")) not in ("disabled", "readonly")
+        selected = bool(widget.tag_ranges("sel")) if is_text else widget.selection_present()
+        nonempty = bool(widget.get("1.0", "end-1c") if is_text else widget.get())
+        for action, index in entries.items():
+            enabled = nonempty if action == "all" else selected
+            if action in ("cut", "delete"):
+                enabled = writable and selected
+            elif action == "paste":
+                enabled = writable
+            elif action in ("undo", "redo"):
+                enabled = writable and bool(widget.tk.call(widget._w, "edit", "can" + action))
+            menu.entryconfigure(index, state="normal" if enabled else "disabled")
+
+    def popup(event):
+        hide_tooltips(widget.winfo_toplevel())
+        widget.focus_set()
+        update_menu()
+        pointer = getattr(event, "num", None) == 3
+        x = event.x_root if pointer else widget.winfo_rootx() + 20
+        y = event.y_root if pointer else widget.winfo_rooty() + 20
+        previous = widget.grab_current()
+        try:
+            menu.tk_popup(x, y)
+        except tk.TclError:
+            # The owner can be closed while a native popup is active.
+            pass
+        finally:
+            try:
+                menu.grab_release()
+                if previous is not None and previous.winfo_exists():
+                    previous.grab_set()
+            except tk.TclError:
+                pass
+        return "break"
+
+    # Refresh before native posting and before programmatic accessibility activation.
+    menu.configure(postcommand=update_menu)
+    for sequence in ("<Button-3>", "<Shift-F10>", "<KeyPress-Menu>"):
+        widget.bind(sequence, popup, add="+")
 
 
 class Tooltip:
@@ -201,6 +272,7 @@ def hide_tooltips(parent, except_tip=None):
 
 
 HELP = {
+    "Только процессор · при сбоях видеокарты": "Запрашивает у локальной Ollama num_gpu=0. Может помочь при сбое видеокарты или драйвера, но не гарантирует устранение HTTP 500. Работает медленнее и не решает нехватку RAM. Действует до закрытия приложения.",
     "Установить и включить ИИ": "После подтверждения скачивает компоненты Ollama и модель, проверяет файлы и запускает ИИ для приложения. При закрытии приложения ИИ выключается. Для первого запуска нужны интернет и место на диске.",
     "Использовать модель": "Выбирает установленную модель в основном приложении и включает режим «ИИ на компьютере». Никакой текст пока не отправляется.",
     "Копировать": "Копирует весь текст результата, включая ваши ручные изменения. Выделять его не нужно.",

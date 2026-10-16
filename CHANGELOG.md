@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased · 1.1.1rc1
+
+- Right-click / Shift+F10 editing menus in text fields and settings, with selection,
+  read-only states and undo/redo handled explicitly.
+- Safe categories and actionable messages for local Ollama HTTP/streaming errors;
+  unknown failures no longer imply memory exhaustion. Raw engine bodies are not exported.
+- Optional per-request CPU-only Ollama setting; last generation failure survives
+  a later connection check. No automatic retries or model changes.
+- Preserve owned-runtime connection and generation deadline when applying connection options.
+
 ## 1.1.0 · 2026-10-16
 
 - Optional custom model download/selection/GGUF import and custom editing instruction

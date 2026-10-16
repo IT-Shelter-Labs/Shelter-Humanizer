@@ -7,6 +7,7 @@ import re
 
 from . import __version__
 from .build_info import build_info
+from .engine_errors import ENGINE_CODES
 
 NUMBERS = {
     "request_time_s",
@@ -20,6 +21,7 @@ NUMBERS = {
     "model_memory_mib",
     "model_vram_mib",
     "loaded_context_tokens",
+    "http_status",
 }
 
 
@@ -70,6 +72,7 @@ def snapshot(config=None, stats=None, *, error_code="none", phase="idle", custom
         "model": model,
         "error_code": error_code,
         "custom_instruction": bool(custom_instruction),
+        "cpu_only": bool(config.cpu_only) if config and config.kind == "ollama" else False,
     }
     # Stage names are our own fixed labels, never provider-supplied strings.
     result["stage"] = (
@@ -81,6 +84,13 @@ def snapshot(config=None, stats=None, *, error_code="none", phase="idle", custom
     result.update(memory_info())
     result["build"] = build_info()
     if isinstance(stats, dict):
+        if isinstance(stats.get("engine_error"), str) and stats["engine_error"] in ENGINE_CODES:
+            result["engine_error"] = stats["engine_error"]
+        version = stats.get("ollama_version")
+        if isinstance(version, str) and re.fullmatch(
+            r"\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]{1,24})?", version
+        ):
+            result["ollama_version"] = version
         for key in NUMBERS:
             value = stats.get(key)
             if type(value) in (int, float) and 0 <= value < 10**18:

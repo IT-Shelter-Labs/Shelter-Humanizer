@@ -1,0 +1,29 @@
+{
+  "version": "1.1.1rc1",
+  "platform": "Windows x64",
+  "python": "3.12.14",
+  "tests_run": 212,
+  "tests_failed": 0,
+  "tests_skipped": 0,
+  "ruff_check": "passed",
+  "ruff_format_check": "passed",
+  "archive": "Shelter-Humanizer-1.1.1rc1-windows-x64.zip",
+  "archive_bytes": 14398233,
+  "archive_sha256": "dfb154aec1bfabe8f42a997c9d746812388edbac98723836184197dcb7785ba4",
+  "build_id": "1.1.1rc1-20261016T160155Z",
+  "source_base_commit": "ebbbbabf90863d093796170c0ba0f7ef7f0d7d10",
+  "source_dirty": true,
+  "frozen_gui_selftest": "passed",
+  "frozen_loopback_protocol_acceptance": "passed",
+  "context_menu_loaded": true,
+  "cpu_only_is_opt_in": true,
+  "real_gpu_workaround_tested": false,
+  "subscriber_error_reproduced": false,
+  "published": false,
+  "limits": [
+    "Exact subscriber model and diagnostic report were not provided",
+    "HTTP 500 root cause on the subscriber device remains unknown",
+    "CPU-only option is verified by request payload, not on the subscriber GPU",
+    "Raw model-server responses are classified in memory and are not exported"
+  ]
+}

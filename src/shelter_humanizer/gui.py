@@ -23,7 +23,7 @@ from .files import TextEncodingError, read_text, write_report, write_text
 from .instance import SingleInstance
 from .local_models import DEFAULT_MODEL
 from .local_setup import LocalSetup
-from .managed_runtime import ManagedRuntime
+from .managed_runtime import RUNTIME_VERSION, ManagedRuntime
 from .models import Result, validate_text
 from .panels import ScrollArea, fit_dialog
 from .preferences import Preferences, validate_instruction
@@ -70,6 +70,7 @@ class App:
         self.model_requests = {}
         self.health_requests = {}
         self.last_diagnostics = diagnostic_snapshot()
+        self.last_failure_diagnostics = None
         self.document_session = None
         self.local_wizard = None
         self.runtime = ManagedRuntime()
@@ -918,9 +919,12 @@ class App:
                 events.put(("progress", revision, message))
 
             def diagnostics(error_code="none", phase="complete"):
+                stats = dict(getattr(client, "last_stats", {}))
+                if mode == "ollama" and self.managed_connection:
+                    stats["ollama_version"] = RUNTIME_VERSION
                 details = diagnostic_snapshot(
                     config if mode != "offline" else None,
-                    getattr(client, "last_stats", {}),
+                    stats,
                     error_code=error_code,
                     phase=phase,
                     custom_instruction=instruction is not None,
@@ -1002,6 +1006,8 @@ class App:
                 if kind == "diagnostics":
                     if revision == self.revision:
                         self.last_diagnostics = value
+                        if value.get("error_code") not in (None, "none"):
+                            self.last_failure_diagnostics = dict(value)
                     continue
                 if kind == "checkpoint":
                     if revision == self.revision:
@@ -1016,7 +1022,7 @@ class App:
                             self.last_diagnostics = details
                             self.replace_text(
                                 box,
-                                json.dumps(details, ensure_ascii=False, indent=2),
+                                json.dumps(self.diagnostic_report(), ensure_ascii=False, indent=2),
                                 readonly=True,
                             )
                             button.configure(state="normal")
@@ -1466,6 +1472,7 @@ class App:
         ).pack(anchor="w")
         streaming = tk.BooleanVar(master=window, value=config.streaming)
         adaptive = tk.BooleanVar(master=window, value=config.adaptive_context)
+        cpu_only = tk.BooleanVar(master=window, value=config.cpu_only)
         if kind == "api":
             ttk.Checkbutton(frame, text="Потоковый ответ (SSE)", variable=streaming).pack(
                 anchor="w", pady=6
@@ -1477,6 +1484,15 @@ class App:
                 style="Muted.TLabel",
             ).pack(fill="x")
         else:
+            ttk.Checkbutton(
+                frame, text="Только процессор · при сбоях видеокарты", variable=cpu_only
+            ).pack(anchor="w", pady=6)
+            ttk.Label(
+                frame,
+                text="Обходной вариант при ошибках GPU/драйвера. Запросит у Ollama работу без выгрузки слоёв на GPU. Может быть значительно медленнее; не устраняет нехватку оперативной памяти.",
+                wraplength=540,
+                style="Muted.TLabel",
+            ).pack(fill="x")
             ttk.Checkbutton(
                 frame, text="Подбирать контекст по объёму задания", variable=adaptive
             ).pack(anchor="w", pady=6)
@@ -1494,16 +1510,20 @@ class App:
                 model.get().strip(),
                 key.get().strip(),
                 config.timeout,
+                generation_timeout=config.generation_timeout,
                 inspect_model=kind == "ollama",
                 adaptive_context=adaptive.get(),
                 streaming=streaming.get(),
+                cpu_only=cpu_only.get() if kind == "ollama" else False,
             )
             try:
                 candidate.validate()
                 candidate = replace(candidate, url=candidate.base_url())
                 self.configs[kind] = candidate
                 if kind == "ollama":
-                    self.managed_connection = False
+                    self.managed_connection = (
+                        self.managed_connection and candidate.url == config.base_url()
+                    )
                 self._mode_changed()
                 window.destroy()
                 self.status.set("Подключение настроено для текущего запуска.")
@@ -1620,6 +1640,12 @@ class App:
                     return
         self.close()
 
+    def diagnostic_report(self):
+        report = dict(self.last_diagnostics)
+        if self.last_failure_diagnostics is not None:
+            report["last_failure"] = dict(self.last_failure_diagnostics)
+        return report
+
     def diagnostics_settings(self):
         if self.busy:
             self.status.set("Дождитесь обработки или отмените её перед проверкой подключения.")
@@ -1637,7 +1663,7 @@ class App:
         body.pack(fill="both", expand=True)
         box = self.text_box(body)
         self.replace_text(
-            box, json.dumps(self.last_diagnostics, ensure_ascii=False, indent=2), readonly=True
+            box, json.dumps(self.diagnostic_report(), ensure_ascii=False, indent=2), readonly=True
         )
 
         def check():
@@ -1646,7 +1672,7 @@ class App:
                 self.last_diagnostics = diagnostic_snapshot()
                 self.replace_text(
                     box,
-                    json.dumps(self.last_diagnostics, ensure_ascii=False, indent=2),
+                    json.dumps(self.diagnostic_report(), ensure_ascii=False, indent=2),
                     readonly=True,
                 )
                 return
@@ -1658,6 +1684,8 @@ class App:
             def worker():
                 checked = config
                 stats, error = {}, "none"
+                if managed:
+                    stats["ollama_version"] = RUNTIME_VERSION
                 try:
                     if managed:
                         checked = replace(config, url=self.runtime.start(cancel, lambda text: None))
@@ -1697,7 +1725,7 @@ class App:
             footer,
             text="Копировать диагностику",
             command=lambda: self.clipboard(
-                json.dumps(self.last_diagnostics, ensure_ascii=False, indent=2)
+                json.dumps(self.diagnostic_report(), ensure_ascii=False, indent=2)
             ),
         ).pack(side="left", padx=8)
         ttk.Button(footer, text="Закрыть", command=window.destroy).pack(side="right")

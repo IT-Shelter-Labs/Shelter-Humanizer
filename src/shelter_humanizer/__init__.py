@@ -1,3 +1,3 @@
 """Russian text editing and transparent Unicode inspection."""
 
-__version__ = "1.1.0"
+__version__ = "1.1.1rc1"

@@ -408,6 +408,86 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn("test-key", str(caught.exception))
         self.assertNotIn("private-text", str(caught.exception))
 
+    def test_local_http_500_recognizes_categories_without_exposing_raw_body(self):
+        type(self).status = 500
+        for message, category in (
+            ("model requires more system memory", "memory"),
+            ("CUDA error: out of memory", "memory"),
+            ("CUDA error: driver failure", "gpu"),
+            ("unknown model architecture: qwen35", "architecture"),
+            ("invalid GGUF file", "model_file"),
+            ("runner process has terminated", "runner"),
+            ("something failed", "unknown"),
+        ):
+            with self.subTest(category=category, message=message):
+                type(self).response = {"error": message + " private-text test-key C:/Users/private"}
+                client = self.client("ollama")
+                with self.assertRaises(ProviderError) as caught:
+                    client.complete([])
+                self.assertEqual(caught.exception.code, "ollama_" + category)
+                self.assertEqual(client.last_stats["engine_error"], category)
+                for secret in ("private-text", "test-key", "C:/Users/private"):
+                    self.assertNotIn(secret, str(caught.exception))
+                self.assertEqual(len(self.requests), 1)
+                type(self).requests = []
+
+    def test_500_does_not_guess_memory_or_classify_remote_api_body(self):
+        type(self).status = 500
+        for response in (
+            b"not json private-text",
+            {"error": []},
+            b'{"error":"out of memory ' + b"x" * 9000 + b'"}',
+        ):
+            type(self).response = response
+            with self.assertRaises(ProviderError) as caught:
+                self.client("ollama").complete([])
+            self.assertEqual(caught.exception.code, "ollama_unknown")
+            self.assertIn("не доказывает", str(caught.exception))
+            self.assertNotIn("private-text", str(caught.exception))
+        type(self).response = {"error": "CUDA error private-text"}
+        with self.assertRaises(ProviderError) as caught:
+            self.client("api").complete([])
+        self.assertEqual(caught.exception.code, "http_500")
+        self.assertNotIn("CUDA", str(caught.exception))
+
+    def test_streaming_engine_error_rejects_partial_text_and_keeps_safe_category(self):
+        type(self).response = self.record("partial") + b'{"error":"CUDA error private data"}\n'
+        client = self.client("ollama")
+        with self.assertRaises(ProviderError) as caught:
+            client.complete([])
+        self.assertEqual(caught.exception.code, "ollama_gpu")
+        self.assertNotIn("private data", str(caught.exception))
+        self.assertEqual(client.last_stats["engine_error"], "gpu")
+
+    def test_cpu_only_is_explicit_and_never_changes_api_payload_or_model(self):
+        type(self).response = {"done": True, "message": {"content": "Текст"}}
+        for cpu in (False, True):
+            client = Client(ProviderConfig("ollama", self.url, "qwen3.5:4b", cpu_only=cpu))
+            client.complete([])
+            data = json.loads(self.requests[-1][2])
+            self.assertEqual(data["model"], "qwen3.5:4b")
+            if cpu:
+                self.assertEqual(data["options"]["num_gpu"], 0)
+            else:
+                self.assertNotIn("num_gpu", data["options"])
+        type(self).response = {
+            "choices": [{"finish_reason": "stop", "message": {"content": "Текст"}}]
+        }
+        Client(ProviderConfig("api", self.url, "test-model", cpu_only=True)).complete([])
+        self.assertNotIn("options", json.loads(self.requests[-1][2]))
+
+    def test_success_after_manual_retry_does_not_report_stale_engine_error(self):
+        client = self.client("ollama")
+        type(self).status = 500
+        type(self).response = {"error": "CUDA error"}
+        self.assertRaises(ProviderError, client.complete, [])
+        self.assertEqual(client.last_stats["engine_error"], "gpu")
+        type(self).status = 200
+        type(self).response = {"done": True, "message": {"content": "Текст"}}
+        self.assertEqual(client.complete([]), "Текст")
+        self.assertNotIn("engine_error", client.last_stats)
+        self.assertEqual(client.last_stats["http_status"], 200)
+
     def test_malformed_and_oversized(self):
         for response in (b"not json", b"\xff", [], b" " * (MAX_RESPONSE + 1)):
             type(self).response = response

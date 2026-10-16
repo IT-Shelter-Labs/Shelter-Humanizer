@@ -85,7 +85,10 @@ def split_document(text, *, limit=6000, terms=()):
 
 def fingerprint(text, settings, client):
     config = getattr(client, "config", None)
-    identity = {key: getattr(config, key, "") for key in ("kind", "url", "model")}
+    identity = {
+        key: getattr(config, key, "")
+        for key in ("kind", "url", "model", "cpu_only", "adaptive_context")
+    }
     payload = json.dumps(
         {"text": text, "settings": settings, "provider": identity},
         ensure_ascii=False,

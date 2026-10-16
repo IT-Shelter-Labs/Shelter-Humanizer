@@ -14,6 +14,7 @@ import urllib.request
 from dataclasses import dataclass, field, replace
 
 from . import __version__
+from .engine_errors import HINTS, MAX_ERROR_BODY, classify, classify_body
 
 MAX_RESPONSE = 2 * 1024 * 1024
 MAX_STREAM_LINE = 64 * 1024
@@ -95,6 +96,7 @@ class ProviderConfig:
     adaptive_context: bool = True
     inspect_model: bool = False
     streaming: bool = True
+    cpu_only: bool = False
 
     def base_url(self) -> str:
         if self.kind not in ("ollama", "api"):
@@ -161,6 +163,7 @@ class Client:
             "::1",
         )
         self.handlers = [NoRedirect()]
+        self.local_engine = local and config.kind == "ollama"
         if local:
             self.handlers.append(urllib.request.ProxyHandler({}))
 
@@ -243,6 +246,7 @@ class Client:
             req = urllib.request.Request(base + path, data=data, headers=headers)
             opener = urllib.request.build_opener(*self.handlers, *exchange.handlers())
             with opener.open(req, timeout=self.config.timeout) as response:
+                self.last_stats["http_status"] = response.status
                 if exchange.stopped:
                     raise ProviderCancelled("Обработка отменена. Исходник сохранён.")
                 if response.headers.get("Content-Encoding", "identity") != "identity":
@@ -260,17 +264,32 @@ class Client:
                 raise ProviderError("Сервис вернул неподходящий формат ответа.")
             return decoded
         except urllib.error.HTTPError as exc:
-            exc.close()
+            status = exc.code
+            self.last_stats["http_status"] = status
+            category = None
+            try:
+                if status == 500 and self.local_engine:
+                    # Bound the read, classify in memory, and discard the raw body.
+                    category = classify_body(exc.read(MAX_ERROR_BODY + 1))
+            except (OSError, ValueError):
+                category = "unknown"
+            finally:
+                exc.close()
+            if category is not None:
+                self.last_stats["engine_error"] = category
+                raise ProviderError(
+                    f"HTTP {status}. {HINTS[category]}", code="ollama_" + category
+                ) from None
             label = {
                 401: "Проверьте API-ключ.",
                 403: "Сервис запретил доступ.",
                 404: "Проверьте адрес и имя модели.",
                 429: "Лимит сервиса; попробуйте позже.",
                 400: "Параметры или формат не поддерживаются выбранной моделью/сервисом.",
-                500: "Ошибка движка модели. Проверьте доступную память и диагностику ИИ.",
+                500: "Внутренняя ошибка ИИ-сервиса. Причина не установлена; проверьте его доступность и диагностику.",
                 503: "ИИ-сервис временно недоступен или занят. Повторите позже.",
-            }.get(exc.code, "Проверьте подключение и настройки сервиса.")
-            raise ProviderError(f"HTTP {exc.code}. {label}", code=f"http_{exc.code}") from None
+            }.get(status, "Проверьте подключение и настройки сервиса.")
+            raise ProviderError(f"HTTP {status}. {label}", code=f"http_{status}") from None
         except (TimeoutError, socket.timeout):
             local = self.config.kind == "ollama" and payload and payload.get("stream")
             raise ProviderError(self._timeout_message(local), code="idle_timeout") from None
@@ -300,6 +319,10 @@ class Client:
                 if not line.strip():
                     continue
                 record = json.loads(line.decode("utf-8"))
+                if isinstance(record, dict) and record.get("error") and self.local_engine:
+                    category = classify(record["error"])
+                    self.last_stats["engine_error"] = category
+                    raise ProviderError(HINTS[category], code="ollama_" + category)
                 if not isinstance(record, dict) or record.get("error"):
                     raise ProviderError("Ollama не смогла завершить ответ. Проверьте её работу.")
                 message = record.get("message", {})
@@ -390,6 +413,8 @@ class Client:
 
     def complete(self, messages: list[dict[str, str]], *, response_schema=None) -> str:
         self.config.validate()
+        for key in ("http_status", "engine_error", "request_time_s", "first_fragment_s"):
+            self.last_stats.pop(key, None)
         if self.config.inspect_model:
             self.prepare_model()
         payload = {"model": self.config.model.strip(), "messages": messages, "stream": False}
@@ -457,6 +482,9 @@ class Client:
                 )
             if response_schema is not None:
                 payload["format"] = response_schema
+            if self.config.cpu_only:
+                payload["options"]["num_gpu"] = 0
+            self.last_stats["cpu_only"] = bool(self.config.cpu_only)
             data = self._request("/api/chat", payload)
             if data.get("done") is not True or data.get("done_reason") in ("length", "max_tokens"):
                 raise ProviderError(

@@ -61,6 +61,16 @@ class GuiTests(unittest.TestCase):
             if isinstance(w, ttk.Button) and w.cget("text") == label
         )
 
+    def menu_action(self, widget, label):
+        menu = widget.shelter_menu
+        self.root.tk.call(menu.cget("postcommand"))
+        index = next(
+            i
+            for i in range(menu.index("end") + 1)
+            if menu.type(i) == "command" and menu.entrycget(i, "label") == label
+        )
+        return menu, index
+
     def setUp(self):
         try:
             self.root = tk.Tk()
@@ -1063,6 +1073,157 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(len(calls), expected_calls)
         self.assertEqual(self.app.get_text(self.app.output), source)
         self.assertIn("chunked", self.app.result.flags)
+
+    def test_context_menu_copies_cuts_pastes_unicode_and_undoes(self):
+        self.app.set_source("Русский текст 👩‍💻")
+        text = self.app.source
+        text.tag_add("sel", "1.0", "end-1c")
+        menu, index = self.menu_action(text, "Копировать")
+        menu.invoke(index)
+        self.assertEqual(read_clipboard(self.root), "Русский текст 👩‍💻")
+        menu, index = self.menu_action(text, "Вырезать")
+        menu.invoke(index)
+        self.assertEqual(self.app.get_text(text), "")
+        menu, index = self.menu_action(text, "Вставить")
+        menu.invoke(index)
+        self.assertEqual(self.app.get_text(text), "Русский текст 👩‍💻")
+        menu, index = self.menu_action(text, "Отменить")
+        menu.invoke(index)
+        self.assertEqual(self.app.get_text(text), "")
+        menu, index = self.menu_action(text, "Повторить")
+        menu.invoke(index)
+        self.assertEqual(self.app.get_text(text), "Русский текст 👩‍💻")
+
+    def test_context_menu_replaces_selection_and_readonly_protects_text(self):
+        from shelter_humanizer.clipboard import write
+
+        self.app.replace_text(self.app.output, "Старый текст")
+        box = self.app.output
+        box.tag_add("sel", "1.0", "end-1c")
+        write(self.root, "Новый текст")
+        menu, index = self.menu_action(box, "Вставить")
+        menu.invoke(index)
+        self.assertEqual(self.app.get_text(box), "Новый текст")
+        box.configure(state="disabled")
+        box.tag_add("sel", "1.0", "end-1c")
+        for action in ("Вставить", "Вырезать", "Удалить выделенное", "Отменить"):
+            menu, index = self.menu_action(box, action)
+            self.assertEqual(menu.entrycget(index, "state"), "disabled")
+            menu.invoke(index)
+        menu, index = self.menu_action(box, "Копировать")
+        menu.invoke(index)
+        self.assertEqual(read_clipboard(self.root), "Новый текст")
+        self.assertEqual(self.app.get_text(box), "Новый текст")
+
+    def test_context_menu_for_entry_and_readonly_model_choice(self):
+        from shelter_humanizer.clipboard import write
+        from shelter_humanizer.ui_helpers import bind_editing
+
+        self.app.mode.set("api")
+        self.app.settings()
+        window = next(
+            w
+            for w in self.root.winfo_children()
+            if isinstance(w, tk.Toplevel) and w.title() == "Подключение к ИИ"
+        )
+        entry = next(w for w in self.descendants(window) if type(w) is ttk.Entry)
+        entry.delete(0, "end")
+        write(self.root, "Пример 👩‍💻")
+        menu, index = self.menu_action(entry, "Вставить")
+        menu.invoke(index)
+        self.assertEqual(entry.get(), "Пример 👩‍💻")
+        entry.selection_range(0, "end")
+        menu, index = self.menu_action(entry, "Вырезать")
+        menu.invoke(index)
+        self.assertEqual(entry.get(), "")
+        self.assertEqual(read_clipboard(self.root), "Пример 👩‍💻")
+        chooser = ttk.Combobox(window, values=["Qwen"], state="readonly")
+        chooser.set("Qwen")
+        chooser.selection_range(0, "end")
+        bind_editing(chooser)
+        menu, index = self.menu_action(chooser, "Вставить")
+        self.assertEqual(menu.entrycget(index, "state"), "disabled")
+        window.destroy()
+
+    def test_right_click_and_keyboard_open_one_menu_without_losing_selection(self):
+        from shelter_humanizer.ui_helpers import bind_editing
+
+        self.root.attributes("-alpha", 0)
+        self.root.geometry("960x620+10000+10000")
+        self.root.deiconify()
+        self.root.update()
+        self.app.set_source("Выделенный текст")
+        text = self.app.source
+        text.tag_add("sel", "1.0", "end-1c")
+        menu = text.shelter_menu
+        bind_editing(text)
+        self.assertIs(text.shelter_menu, menu)
+        text.focus_force()
+        self.root.update()
+        with patch.object(menu, "tk_popup") as popup:
+            text.event_generate("<Button-3>", x=5, y=5)
+            self.root.update()
+            self.assertEqual(popup.call_count, 1)
+            self.assertEqual(text.get("sel.first", "sel.last"), "Выделенный текст")
+            text.event_generate("<Shift-F10>")
+            self.root.update()
+            self.assertEqual(popup.call_count, 2)
+
+    def test_cpu_setting_keeps_owned_connection_and_request_deadline(self):
+        from shelter_humanizer.providers import ProviderConfig
+
+        self.app.mode.set("ollama")
+        self.app.configs["ollama"] = ProviderConfig(
+            url="http://127.0.0.1:11435", model="qwen3.5:4b", generation_timeout=1200
+        )
+        self.app.managed_connection = True
+        self.app.settings()
+        window = next(
+            w
+            for w in self.root.winfo_children()
+            if isinstance(w, tk.Toplevel) and w.title() == "Подключение к ИИ"
+        )
+        cpu = next(
+            w
+            for w in self.descendants(window)
+            if isinstance(w, ttk.Checkbutton) and str(w.cget("text")).startswith("Только процессор")
+        )
+        cpu.invoke()
+        self.button(window, "Применить").invoke()
+        self.assertTrue(self.app.configs["ollama"].cpu_only)
+        self.assertTrue(self.app.managed_connection)
+        self.assertEqual(self.app.configs["ollama"].generation_timeout, 1200)
+
+    def test_last_generation_failure_survives_successful_connection_check(self):
+        failure = {
+            "provider": "ollama",
+            "error_code": "ollama_gpu",
+            "engine_error": "gpu",
+            "model": "qwen3.5:4b",
+            "cpu_only": False,
+            "stage": "editing",
+        }
+        self.app.events.put(("diagnostics", self.app.revision, failure))
+        self.app._poll()
+        self.app.diagnostics_settings()
+        window = next(
+            w
+            for w in self.root.winfo_children()
+            if isinstance(w, tk.Toplevel) and w.title().startswith("Диагностика")
+        )
+        box = next(w for w in self.descendants(window) if isinstance(w, tk.Text))
+        token = object()
+        button = self.button(window, "Проверить подключение")
+        self.app.health_requests[token] = (window, box, button, threading.Event())
+        success = {"provider": "ollama", "error_code": "none", "stage": "connection"}
+        self.app.events.put(("health", 0, (token, success)))
+        self.app._poll()
+        visible = json.loads(self.app.get_text(box))
+        self.assertEqual(visible["error_code"], "none")
+        self.assertEqual(visible["last_failure"]["error_code"], "ollama_gpu")
+        self.button(window, "Копировать диагностику").invoke()
+        self.assertEqual(json.loads(read_clipboard(self.root)), visible)
+        window.destroy()
 
 
 if __name__ == "__main__":
