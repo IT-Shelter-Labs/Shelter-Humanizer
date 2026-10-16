@@ -1,4 +1,10 @@
-Shelter Humanizer 1.0.0
+Shelter Humanizer 1.1.0rc1 · release candidate
+
+Optional settings: «Настройки текста» → «Расширенные» (Text settings → Advanced).
+Add a model by Ollama tag, select an installed model, or import a compatible single
+GGUF. Edit the instruction for this session, opt into saving it, or restore the default.
+Explicit chunking can resume while the app is open. Diagnostics exclude texts/keys.
+See docs/ADVANCED_SETTINGS_RU.md (Russian) and docs/RELEASE_NOTES_1.1.0rc1.md.
 
 Extract the entire ZIP, then open Shelter-Humanizer.exe. Python is not required.
 The desktop interface is in Russian. English documentation:

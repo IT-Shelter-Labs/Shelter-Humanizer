@@ -19,7 +19,7 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from .local_models import PRESETS, DownloadCancelled
+from .local_models import PRESETS, DownloadCancelled, model_tag
 from .providers import Client, ProviderConfig, ProviderError
 
 RUNTIME_VERSION = "0.35.1"
@@ -294,19 +294,32 @@ class ManagedRuntime:
 
     def selected_model(self):
         try:
-            selection = json.loads((self.directory / "selection.json").read_text(encoding="utf-8"))
-            model = selection.get("model") if isinstance(selection, dict) else ""
-            return model if model in {p.name for p in PRESETS} else ""
+            path = self.directory / "selection.json"
+            if path.stat().st_size > 8192:
+                return ""
+            selection = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(selection, dict):
+                return ""
+            model = selection.get("model")
+            if not isinstance(model, str):
+                return ""
+            if model in {p.name for p in PRESETS}:
+                return model
+            return model_tag(model) if selection.get("custom") is True else ""
         except (OSError, ValueError):
             return ""
 
-    def save_model(self, model):
-        if model not in {p.name for p in PRESETS}:
+    def save_model(self, model, *, allow_custom=False):
+        if not allow_custom and model not in {p.name for p in PRESETS}:
             raise ProviderError("Неизвестная модель.")
+        model = model_tag(model)
         self.directory.mkdir(parents=True, exist_ok=True)
         target = self.directory / "selection.json"
         temporary = target.with_name(f"selection-{uuid.uuid4().hex}.tmp")
-        temporary.write_text(json.dumps({"model": model}) + "\n", encoding="utf-8")
+        selection = {"model": model}
+        if allow_custom:
+            selection["custom"] = True
+        temporary.write_text(json.dumps(selection) + "\n", encoding="utf-8")
         temporary.replace(target)
 
     def install(self, cancel, progress):

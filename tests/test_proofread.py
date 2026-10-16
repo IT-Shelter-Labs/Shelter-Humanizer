@@ -2,6 +2,7 @@ import json
 import unittest
 
 from shelter_humanizer.proofread import InvalidCorrections, apply, sentences
+from shelter_humanizer.providers import ProviderCancelled, ProviderError
 from shelter_humanizer.service import rewrite
 
 
@@ -80,6 +81,44 @@ class ProofreadTests(unittest.TestCase):
                 )
 
         self.assertRaisesRegex(ValueError, "числа", rewrite, "Цена 200 ₽.", Client())
+
+    def test_provider_failure_in_optional_review_keeps_checked_draft_and_cleans_it(self):
+        class Client:
+            calls = 0
+
+            def complete(self, messages):
+                self.calls += 1
+                if self.calls == 1:
+                    return "Сервис про\u200bверяет 10 файлов. «Точная цитата» https://example.org"
+                raise ProviderError("timeout private response")
+
+        source = "Сервис осуществляет проверку 10 файлов. «Точная цитата» https://example.org"
+        result = rewrite(source, Client())
+        self.assertEqual(result.original, source)
+        self.assertEqual(
+            result.text, "Сервис проверяет 10 файлов. «Точная цитата» https://example.org"
+        )
+        self.assertTrue(any("вычитка не завершилась" in warning for warning in result.warnings))
+        self.assertFalse(any("private response" in warning for warning in result.warnings))
+
+    def test_first_pass_provider_failure_does_not_return_an_echo_as_success(self):
+        class Client:
+            def complete(self, messages):
+                raise ProviderError("first pass failed")
+
+        self.assertRaisesRegex(ProviderError, "first pass failed", rewrite, "Исходник", Client())
+
+    def test_cancelled_review_is_not_converted_to_a_successful_draft(self):
+        class Client:
+            calls = 0
+
+            def complete(self, messages):
+                self.calls += 1
+                if self.calls == 1:
+                    return "Исходник"
+                raise ProviderCancelled("cancelled")
+
+        self.assertRaises(ProviderCancelled, rewrite, "Исходник", Client())
 
     def test_proofread_does_not_restore_stock_intro_or_drop_a_condition(self):
         for replacement in (

@@ -1,5 +1,6 @@
 """Explicit bounded UTF-8 import and atomic export. No automatic history."""
 
+import codecs
 import json
 import os
 import tempfile
@@ -8,15 +9,30 @@ from pathlib import Path
 from .models import MAX_TEXT, validate_text
 
 
-def read_text(path: str | Path) -> str:
+class TextEncodingError(ValueError):
+    pass
+
+
+def read_text(path: str | Path, encoding="auto") -> str:
+    if encoding not in ("auto", "utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "cp1251"):
+        raise ValueError("Неподдерживаемая кодировка TXT.")
+    maximum = MAX_TEXT * 4 + 4
     with Path(path).open("rb") as stream:
-        raw = stream.read(MAX_TEXT * 4 + 4)
-    if len(raw) > MAX_TEXT * 4 + 3:
+        raw = stream.read(maximum + 1)
+    if len(raw) > maximum:
         raise ValueError("Файл слишком большой.")
+    if encoding == "auto":
+        encoding = "utf-8-sig"
+        if raw.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+            encoding = "utf-32"
+        elif raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+            encoding = "utf-16"
     try:
-        text = raw.decode("utf-8-sig")
+        text = raw.decode(encoding)
     except UnicodeDecodeError:
-        raise ValueError("Нужен TXT-файл в UTF-8. Сохраните его с этой кодировкой.") from None
+        raise TextEncodingError(
+            "Не удалось прочитать TXT. Выберите кодировку с предпросмотром или сохраните файл в UTF-8."
+        ) from None
     validate_text(text)
     return text
 

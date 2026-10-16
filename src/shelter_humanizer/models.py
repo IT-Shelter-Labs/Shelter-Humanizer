@@ -64,6 +64,10 @@ class Result:
     before: Analysis
     after: Analysis
     warnings: list[str] = field(default_factory=list)
+    processing_warnings: list[str] = field(default_factory=list)
+    quality_warnings: list[str] = field(default_factory=list)
+    flags: list[str] = field(default_factory=list)
+    depth: str = "edit"
 
     def as_dict(self) -> dict:
         return {"schema_version": 1, **asdict(self)}

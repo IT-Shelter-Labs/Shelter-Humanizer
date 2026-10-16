@@ -6,6 +6,7 @@ import os
 import sys
 
 from . import __version__
+from .documents import rewrite_document
 from .files import read_text, write_report, write_text
 from .prompts import DEPTHS, copy_prompt
 from .providers import Client, ProviderConfig
@@ -41,6 +42,15 @@ def main(argv=None) -> int:
     parser.add_argument("--voice", help="TXT-образец голоса, до 3000 символов")
     parser.add_argument("--protect", action="append", default=[])
     parser.add_argument("--one-pass", action="store_true")
+    parser.add_argument("--instruction", help="UTF-8 TXT со своей инструкцией, до 12 000 символов")
+    parser.add_argument(
+        "--chunks",
+        action="store_true",
+        help="Явно обработать весь документ частями; больше запросов",
+    )
+    parser.add_argument(
+        "--no-stream", action="store_true", help="Непотоковый ответ совместимого API"
+    )
     args = parser.parse_args(argv)
     if args.mode == "gui":
         from .gui import launch
@@ -63,6 +73,7 @@ def main(argv=None) -> int:
                 read_text(args.voice) if args.voice else "",
                 depth=args.depth,
                 terms=tuple(args.protect),
+                instruction=read_text(args.instruction) if args.instruction else None,
             )
             if args.report:
                 raise ValueError("Режим prompt ещё не содержит результата для отчёта.")
@@ -74,9 +85,16 @@ def main(argv=None) -> int:
                     else "https://openrouter.ai/api/v1"
                 )
                 config = ProviderConfig(
-                    args.provider, url, args.model, os.getenv("SHELTER_API_KEY", "")
+                    args.provider,
+                    url,
+                    args.model,
+                    os.getenv("SHELTER_API_KEY", ""),
+                    timeout=180 if args.provider == "ollama" else 60,
+                    inspect_model=args.provider == "ollama",
+                    streaming=not args.no_stream,
                 )
-                result = rewrite(
+                editor = rewrite_document if args.chunks else rewrite
+                result = editor(
                     text,
                     Client(config),
                     genre=args.genre,
@@ -85,7 +103,10 @@ def main(argv=None) -> int:
                     second_pass=not args.one_pass,
                     depth=args.depth,
                     options=CleanOptions(args.spaces, args.confusables, args.nfc),
+                    instruction=read_text(args.instruction) if args.instruction else None,
                 )
+                if args.chunks:
+                    result, _ = result
             else:
                 result = offline(
                     text,

@@ -263,6 +263,8 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(read_text(path), "Новый текст")
             self.assertEqual(len(list(Path(directory).iterdir())), 1)
             path.write_bytes(b"\xff\xfe")
+            self.assertEqual(read_text(path), "")
+            path.write_bytes(b"\xff\xff")
             self.assertRaises(ValueError, read_text, path)
 
     def test_compare_changed_hedges_are_reviewed(self):

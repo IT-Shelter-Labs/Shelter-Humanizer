@@ -9,7 +9,10 @@ from .models import MAX_AI_TEXT, Analysis, Result, validate_text
 from .prompts import DEPTHS, messages
 from .proofread import InvalidCorrections, apply, sentences
 from .proofread import messages as proofread_messages
+from .proofread import schema as review_schema
 from .protection import fact_changes, mask, qualification_changes, validate_protected
+from .providers import Client, ProviderCancelled, ProviderError
+from .quality import completeness
 from .style import GENRES, almost_unchanged, editorial_targets, light_edit, scan_style
 from .unicode_check import CleanOptions, clean_unicode, scan_unicode
 
@@ -28,10 +31,12 @@ def analyze(text: str, genre: str = "plain") -> Analysis:
     )
 
 
-def compare(original: str, edited: str, genre: str = "plain", mode: str = "manual") -> Result:
+def compare(
+    original: str, edited: str, genre: str = "plain", mode: str = "manual", *, depth="edit"
+) -> Result:
     validate_text(original)
     validate_text(edited)
-    return Result(
+    result = Result(
         original,
         edited,
         mode,
@@ -39,6 +44,11 @@ def compare(original: str, edited: str, genre: str = "plain", mode: str = "manua
         analyze(edited, genre),
         fact_changes(original, edited),
     )
+    result.depth = depth
+    if mode not in ("clean", "light", "analyze"):
+        result.quality_warnings, result.flags = completeness(original, edited, depth)
+        result.warnings.extend(result.quality_warnings)
+    return result
 
 
 def offline(
@@ -64,6 +74,7 @@ def rewrite(
     options: CleanOptions = CleanOptions(),
     cancel: Event | None = None,
     progress=None,
+    instruction=None,
 ) -> Result:
     validate_text(text, MAX_AI_TEXT)
     if not text.strip():
@@ -88,7 +99,9 @@ def rewrite(
     cancelled()
     if progress:
         progress("ИИ редактирует текст…")
-    draft = client.complete(messages(text, genre, voice, depth=depth, terms=terms))
+    draft = client.complete(
+        messages(text, genre, voice, depth=depth, terms=terms, instruction=instruction)
+    )
     cancelled()
     restored = checked(draft)
     review_warning = None
@@ -96,10 +109,27 @@ def rewrite(
         if progress:
             progress("ИИ вычитывает результат…")
         parts = sentences(draft)
-        corrections = client.complete(proofread_messages(text, genre, parts))
+        try:
+            task = proofread_messages(text, genre, parts)
+            if isinstance(client, Client) and client.config.kind == "ollama":
+                corrections = client.complete(task, response_schema=review_schema(parts))
+            else:
+                corrections = client.complete(task)
+        except ProviderCancelled:
+            raise
+        except ProviderError:
+            cancelled()
+            review_warning = (
+                "Дополнительная ИИ-вычитка не завершилась из-за ошибки подключения или ожидания. "
+                "Показана первая редактура, прошедшая проверку защищённых данных. "
+                "Вычитайте её самостоятельно."
+            )
+            corrections = None
         cancelled()
         try:
-            candidate = checked(apply(draft, corrections, parts))
+            candidate = (
+                checked(apply(draft, corrections, parts)) if corrections is not None else draft
+            )
             old_alerts = set(fact_changes(text, draft))
             new_alerts = set(fact_changes(text, candidate))
 
@@ -129,15 +159,17 @@ def rewrite(
     cleanup = mask(restored, terms)
     restored = cleanup.restore(clean_unicode(cleanup.text, options))
     checked(restored)
-    result = compare(text, restored, genre, "ai")
+    result = compare(text, restored, genre, "ai", depth=depth)
     if review_warning:
-        result.warnings.append(review_warning)
+        result.processing_warnings.append(review_warning)
+        result.flags.append("review_incomplete")
     if depth == "rephrase" and editorial_targets(text) and almost_unchanged(text, restored):
-        result.warnings.append(
+        result.processing_warnings.append(
             "ИИ почти сохранил исходные формулировки, включая места для редактуры. "
             "Глубокая переработка могла не выполниться; сравните текст или попробуйте другую модель."
         )
-    result.warnings.append(
+    result.processing_warnings.append(
         "Сравните смысл и авторский тон с исходником: автоматическая проверка не заменяет вычитку."
     )
+    result.warnings = list(dict.fromkeys(result.warnings + result.processing_warnings))
     return result

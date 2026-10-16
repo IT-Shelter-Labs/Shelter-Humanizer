@@ -1,0 +1,39 @@
+{
+  "version": "1.1.0rc1",
+  "date": "2026-10-16",
+  "platform": "Windows x64",
+  "python": "3.12.14",
+  "tk": "8.6.12",
+  "tests_run": 200,
+  "tests_skipped": 0,
+  "tests_failed": 0,
+  "ruff_check": "passed",
+  "ruff_format_check": "passed",
+  "build_id": "1.1.0rc1-20261016T124732Z",
+  "source_base_commit": "62899c1b493bf23693e18a04690c4447bfe05880",
+  "source_dirty": true,
+  "archive": "Shelter-Humanizer-1.1.0rc1-windows-x64.zip",
+  "archive_bytes": 14391640,
+  "archive_sha256": "371579848fb3f298f2ce98a39e02c478d766aaa50deb1b0556f5f500b0b1b224",
+  "default_model": "qwen3.5:4b",
+  "default_system_sha256": "2d7a20a3b3917178a5bed75b697d73041291dab04d4018dbfd0040548b078a96",
+  "frozen_acceptance": {
+    "clean_environment_gui_selftest": true,
+    "unicode_and_space_path": true,
+    "streaming_ollama": true,
+    "review_failure_preserves_draft": true,
+    "streaming_api": true,
+    "all_document_parts_processed": true,
+    "custom_instruction": true,
+    "post_ai_cleanup": true,
+    "external_network_used": false,
+    "real_model_used": false
+  },
+  "limits": [
+    "GGUF import tested with synthetic files and loopback protocol server only",
+    "No new real-model quality or performance evaluation",
+    "No subscriber-device, Linux binary or all-provider acceptance test",
+    "Executable has no certificate signature",
+    "Local release candidate has not been published"
+  ]
+}

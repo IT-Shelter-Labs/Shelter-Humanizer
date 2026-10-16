@@ -1,7 +1,23 @@
 # Changelog
 
+## 1.1.0rc1 (local candidate, not published)
+
+- Optional custom model download/selection/GGUF import and custom editing instruction
+  in advanced settings. Defaults and explicit saved model choices remain intact.
+- Streaming Ollama and compatible SSE API, bounded waits, cancellation, safe optional
+  review fallback and structured local corrections.
+- Manual output conflict protection, save-on-exit choice, persistent execution warnings,
+  heuristic completeness checks and scrollable settings with pinned actions.
+- Explicit document chunking with in-memory resume, model metadata/context estimates,
+  connection diagnostics without text/keys, BOM TXT import and explicit legacy preview.
+- Windows instance guard and public build identity. See release notes for limits.
+
+
 ## Unreleased — после 1.0.0
 
+- Ollama: потоковое получение ответа с прогрессом, до 15 минут на проход вместо общего трёхминутного лимита; предел простоя GUI/CLI 180 секунд, ограничение размера и проверка завершения сохранены. Отмена прерывает соединение запроса.
+- Сетевая ошибка необязательной ИИ-вычитки сохраняет первую редактуру с предупреждением, очисткой Unicode и повторной проверкой защищённых данных. Отмена и нарушение защищённых данных не маскируются.
+- Сборщик поддерживает отдельный каталог `--output-dir`, чтобы проверочные EXE не заменяли прежние архивы.
 - Qwen 3.5 4B (`qwen3.5:4b`) — начальный выбор мастера установки и пустого поля подключения Ollama. Сохранённая модель и вручную указанные имена не заменяются; DeepSeek остаётся альтернативой.
 - Русский промпт `precise` с опубликованными результатами сравнения; GUI по умолчанию выбирает «Небольшие правки». Превосходство на любых текстах или улучшение DeepSeek R1 не заявляется.
 - Офлайн-проверка EXE дополнительно проверяет начальный выбор Qwen и сохранение установленного DeepSeek.

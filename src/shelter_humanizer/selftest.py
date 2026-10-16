@@ -7,10 +7,15 @@ import tkinter as tk
 from pathlib import Path
 
 from . import __version__
+from .build_info import build_info
+from .diagnostics import snapshot
 from .files import write_text
 from .gui import SAMPLE, App
 from .local_setup import LocalSetup
 from .managed_runtime import ManagedRuntime
+from .preferences import Preferences
+from .prompts import system_instruction
+from .providers import LOCAL_GENERATION_TIMEOUT, ProviderError
 from .service import offline, rewrite
 
 SMOKE_TEXT = (
@@ -29,6 +34,12 @@ def run(path: str) -> int:
         app = App(root, auto_connect=False)
         assert app.depth_key() == "edit"
         with tempfile.TemporaryDirectory() as directory:
+            preferences = Preferences(Path(directory) / "preferences.json")
+            preferences.save("Редактируй бережно.")
+            assert preferences.load()["instruction"] == "Редактируй бережно."
+            assert "Редактируй бережно." in system_instruction(preferences.load()["instruction"])
+            preferences.save(None)
+            assert not preferences.path.exists()
             runtime = ManagedRuntime(directory)
             wizard = LocalSetup(root, lambda: app.colors, lambda model, url: None, runtime)
             default_model = wizard.choice.get()
@@ -40,6 +51,8 @@ def run(path: str) -> int:
             wizard = LocalSetup(root, lambda: app.colors, lambda model, url: None, runtime)
             assert wizard.choice.get() == "deepseek-r1:8b-0528-qwen3-q4_K_M"
             wizard.close()
+            runtime.save_model("my-editor:q4", allow_custom=True)
+            assert ManagedRuntime(directory).selected_model() == "my-editor:q4"
             runtime.close()
         app.set_source(SAMPLE)
         result = offline(SAMPLE)
@@ -67,6 +80,20 @@ def run(path: str) -> int:
         )
         assert generated.text == "Проверка\u00a0текста. «Точная цитата» 👩‍💻"
         assert generated.original == "Проверка текста. «Точная цитата» 👩‍💻"
+
+        class FailedReview:
+            calls = 0
+
+            def complete(self, messages):
+                self.calls += 1
+                if self.calls == 1:
+                    return "Сервис про\u200bверяет 10 файлов."
+                raise ProviderError("Synthetic optional review timeout")
+
+        first_draft = rewrite("Сервис осуществляет проверку 10 файлов.", FailedReview())
+        assert first_draft.text == "Сервис проверяет 10 файлов."
+        assert any("вычитка не завершилась" in warning for warning in first_draft.warnings)
+        assert app.configs["ollama"].timeout == 180 and LOCAL_GENERATION_TIMEOUT == 900
         for theme in ("dark", "light"):
             app.apply_theme(theme)
             root.update()
@@ -88,6 +115,12 @@ def run(path: str) -> int:
             default_model=default_model,
             saved_model_preserved=True,
             ai_system_sha256=synthetic_ai.system_sha256,
+            review_timeout_preserves_draft=True,
+            local_generation_timeout=LOCAL_GENERATION_TIMEOUT,
+            custom_model_selection=True,
+            instruction_preferences_reset=True,
+            build=build_info(),
+            diagnostics_version=snapshot()["app_version"],
         )
         app.close()
         root = None

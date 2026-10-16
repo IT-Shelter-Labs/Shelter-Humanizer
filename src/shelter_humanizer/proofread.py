@@ -47,6 +47,35 @@ def sentences(text: str) -> tuple[Sentence, ...]:
     return tuple(result)
 
 
+def schema(parts):
+    identifier = {"type": "string"}
+    if len(parts) <= 128:
+        identifier["enum"] = [part.id for part in parts]
+    else:
+        # Membership is still checked by apply(); avoid a huge grammar/context cost.
+        identifier["pattern"] = "^S[0-9]{3,6}$"
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "edits": {
+                "type": "array",
+                "maxItems": 12,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "id": identifier,
+                        "replacement": {"type": "string", "minLength": 1, "maxLength": 600},
+                    },
+                    "required": ["id", "replacement"],
+                },
+            }
+        },
+        "required": ["edits"],
+    }
+
+
 def messages(original: str, genre: str, parts: tuple[Sentence, ...]):
     instruction = """Ты — корректор. Проверяемый текст дан в draft_sentences с идентификаторами.
 source_for_fact_check — справочный исходник; его не редактируй.

@@ -16,6 +16,9 @@ class ServerTests(unittest.TestCase):
         cls.status = 200
         cls.headers = {}
         cls.drip = False
+        cls.chunks = None
+        cls.wait_for_disconnect = False
+        cls.peer_closed = threading.Event()
 
         class Handler(BaseHTTPRequestHandler):
             def handle_request(self):
@@ -30,7 +33,22 @@ class ServerTests(unittest.TestCase):
                     if isinstance(cls.response, bytes)
                     else json.dumps(cls.response, ensure_ascii=False).encode()
                 )
-                if cls.drip:
+                if cls.chunks is not None:
+                    for delay, chunk in cls.chunks:
+                        time.sleep(delay)
+                        try:
+                            self.wfile.write(chunk)
+                            self.wfile.flush()
+                        except OSError:
+                            break
+                    if cls.wait_for_disconnect:
+                        self.connection.settimeout(2)
+                        try:
+                            if self.rfile.read(1) == b"":
+                                cls.peer_closed.set()
+                        except OSError:
+                            pass
+                elif cls.drip:
                     for byte in raw:
                         try:
                             self.wfile.write(bytes([byte]))
@@ -64,6 +82,9 @@ class ServerTests(unittest.TestCase):
         type(self).status = 200
         type(self).headers = {}
         type(self).drip = False
+        type(self).chunks = None
+        type(self).wait_for_disconnect = False
+        type(self).peer_closed = threading.Event()
 
     def client(self, kind="api"):
         return Client(ProviderConfig(kind, self.url, "test-model", "test-key", 2))
@@ -77,7 +98,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(path, "/chat/completions")
         self.assertEqual(headers["Authorization"], "Bearer test-key")
         self.assertEqual(json.loads(body)["messages"][0]["content"], "Ёлка")
-        self.assertFalse(json.loads(body)["stream"])
+        self.assertTrue(json.loads(body)["stream"])
 
     def test_ollama_no_auth_and_correct_protocol(self):
         type(self).response = {"done": True, "message": {"content": "Готово"}}
@@ -86,6 +107,99 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(path, "/api/chat")
         self.assertNotIn("Authorization", headers)
         self.assertEqual(json.loads(body)["options"]["temperature"], 0.35)
+        self.assertIs(json.loads(body)["stream"], True)
+
+    @staticmethod
+    def record(content="", thinking="", **extra):
+        return (
+            json.dumps(
+                {"message": {"content": content, "thinking": thinking}, "done": False, **extra},
+                ensure_ascii=False,
+            )
+            + "\n"
+        ).encode()
+
+    def test_local_stream_can_exceed_idle_timeout_while_tokens_arrive(self):
+        source = ("Редактор сохраняет смысл текста. " * 150)[:4407]
+        progress = []
+        type(self).chunks = [
+            (0.2, self.record(source[start : start + 600])) for start in range(0, len(source), 600)
+        ] + [(0, self.record(done=True, done_reason="stop"))]
+        started = time.monotonic()
+        client = Client(
+            ProviderConfig("ollama", self.url, "qwen3.5:4b", timeout=1, generation_timeout=4),
+            progress=progress.append,
+        )
+        self.assertEqual(client.complete([{"role": "user", "content": source}]), source)
+        self.assertGreater(time.monotonic() - started, 1)
+        self.assertTrue(progress)
+        self.assertTrue(any("символов" in value for value in progress))
+        self.assertTrue(all(source[:20] not in value for value in progress))
+
+    def test_stream_handles_split_utf8_and_keeps_reasoning_out_of_result(self):
+        raw = (
+            self.record(thinking="private reasoning")
+            + self.record("Ёлка 👩‍💻")
+            + self.record(" готова", done=True, done_reason="stop")
+        )
+        type(self).chunks = [(0, raw[i : i + 1]) for i in range(len(raw))]
+        self.assertEqual(self.client("ollama").complete([]), "Ёлка 👩‍💻 готова")
+
+    def test_stream_requires_terminal_record_and_rejects_private_errors(self):
+        for raw in (
+            self.record("partial"),
+            self.record("partial", done=True, done_reason="length"),
+            b'{"error":"private server data"}\n',
+            b'{"message":{"content":[]},"done":true}\n',
+            b'{"message":{"content":"ok"},"done":false}\nnot-json\n',
+            b" " * 65537,
+        ):
+            type(self).response = raw
+            with self.subTest(raw=raw[:40]):
+                with self.assertRaises(ProviderError) as caught:
+                    self.client("ollama").complete([])
+                self.assertNotIn("private server data", str(caught.exception))
+
+    def test_stream_has_total_deadline_even_if_model_keeps_sending(self):
+        type(self).chunks = [(0.15, self.record("part"))] * 12
+        client = Client(ProviderConfig("ollama", self.url, "test", timeout=1, generation_timeout=1))
+        started = time.monotonic()
+        self.assertRaisesRegex(ProviderError, "Локальный ИИ", client.complete, [])
+        self.assertLess(time.monotonic() - started, 2)
+
+    def test_stream_idle_timeout_is_still_bounded(self):
+        type(self).chunks = [(0, self.record("start")), (1.4, self.record(done=True))]
+        client = Client(ProviderConfig("ollama", self.url, "test", timeout=1, generation_timeout=4))
+        started = time.monotonic()
+        self.assertRaisesRegex(ProviderError, "Локальный ИИ", client.complete, [])
+        self.assertLess(time.monotonic() - started, 2)
+
+    def test_cancel_interrupts_active_stream_without_accepting_partial_text(self):
+        from shelter_humanizer.providers import ProviderCancelled
+
+        type(self).chunks = [(0, self.record("partial"))]
+        type(self).wait_for_disconnect = True
+        cancel = threading.Event()
+        timer = threading.Timer(0.15, cancel.set)
+        client = Client(self.client("ollama").config, cancel=cancel)
+        timer.start()
+        started = time.monotonic()
+        try:
+            self.assertRaises(ProviderCancelled, client.complete, [])
+            self.assertLess(time.monotonic() - started, 0.7)
+            self.assertTrue(self.peer_closed.wait(1), "Cancelled request socket remained open")
+        finally:
+            timer.cancel()
+
+    def test_pre_cancel_does_not_send_text(self):
+        from shelter_humanizer.providers import ProviderCancelled
+
+        cancel = threading.Event()
+        cancel.set()
+        self.assertRaises(
+            ProviderCancelled, Client(self.client().config, cancel=cancel).complete, []
+        )
+        self.assertEqual(self.requests, [])
 
     def test_model_list(self):
         type(self).response = {
@@ -104,7 +218,8 @@ class ServerTests(unittest.TestCase):
                 self.assertEqual(client.complete([]), "Текст")
                 payload = json.loads(self.requests[-1][2])
                 self.assertIs(payload["think"], False)
-                self.assertEqual(payload["options"]["num_ctx"], 16384)
+                self.assertGreaterEqual(payload["options"]["num_ctx"], 4096)
+                self.assertLessEqual(payload["options"]["num_ctx"], 16384)
                 self.assertEqual(payload["options"]["temperature"], 0.7)
                 self.assertEqual(payload["options"]["top_p"], 0.8)
                 self.assertEqual(payload["options"]["top_k"], 20)
@@ -257,7 +372,9 @@ class ServerTests(unittest.TestCase):
         }
         type(self).drip = True
         started = time.monotonic()
-        client = Client(ProviderConfig("api", self.url, "test-model", "test-key", 1))
+        client = Client(
+            ProviderConfig("api", self.url, "test-model", "test-key", 1, generation_timeout=1)
+        )
         self.assertRaisesRegex(ProviderError, "вовремя", client.complete, [])
         self.assertLess(time.monotonic() - started, 2.5)
         self.assertEqual(len(self.requests), 1)
@@ -314,6 +431,81 @@ class ServerTests(unittest.TestCase):
         client = Client(ProviderConfig("api", self.url, "", "test-key"))
         self.assertRaises(ProviderError, client.complete, [])
         self.assertEqual(self.requests, [])
+
+    def test_openai_compatible_sse_is_reassembled_without_reasoning(self):
+        type(self).headers = {"Content-Type": "text/event-stream"}
+        records = [
+            {"choices": [{"index": 0, "delta": {"reasoning_content": "private thinking"}}]},
+            {"choices": [{"index": 0, "delta": {"content": "Ёлка "}}]},
+            {"choices": [{"index": 0, "delta": {"content": "👩‍💻"}}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        ]
+        raw = (
+            b": heartbeat\n\n"
+            + b"".join(
+                ("data: " + json.dumps(record, ensure_ascii=False) + "\r\n\r\n").encode()
+                for record in records
+            )
+            + b"data: [DONE]\n\n"
+        )
+        type(self).chunks = [(0, raw[i : i + 3]) for i in range(0, len(raw), 3)]
+        self.assertEqual(self.client().complete([]), "Ёлка 👩‍💻")
+
+    def test_api_stream_can_be_explicitly_disabled_for_legacy_server(self):
+        type(self).response = {
+            "choices": [{"finish_reason": "stop", "message": {"content": "Текст"}}]
+        }
+        client = Client(ProviderConfig("api", self.url, "legacy", streaming=False))
+        self.assertEqual(client.complete([]), "Текст")
+        self.assertIs(json.loads(self.requests[-1][2])["stream"], False)
+
+    def test_sse_incomplete_or_truncated_text_is_never_accepted(self):
+        type(self).headers = {"Content-Type": "text/event-stream"}
+        for response in (
+            b'data: {"choices":[{"delta":{"content":"partial"}}]}\n\n',
+            b'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":"length"}]}\n\n',
+            b"data: [DONE]\n\n",
+        ):
+            type(self).response = response
+            self.assertRaises(ProviderError, self.client().complete, [])
+
+    def test_custom_alias_uses_model_metadata_and_rejects_embedding_only(self):
+        type(self).response = {
+            "capabilities": ["completion"],
+            "details": {"family": "qwen35"},
+            "model_info": {"qwen35.context_length": 32768},
+        }
+        client = Client(
+            ProviderConfig("ollama", self.url, "my-editor:latest", timeout=2, inspect_model=True)
+        )
+        client.prepare_model()
+        self.assertEqual(self.requests[-1][0], "/api/show")
+        type(self).response = {"done": True, "message": {"content": "Текст"}}
+        self.assertEqual(client.complete([]), "Текст")
+        payload = json.loads(self.requests[-1][2])
+        self.assertIs(payload["think"], False)
+        type(self).response = {"capabilities": ["embedding"]}
+        other = Client(
+            ProviderConfig("ollama", self.url, "embedding", timeout=2, inspect_model=True)
+        )
+        self.assertRaisesRegex(ProviderError, "генерации текста", other.complete, [])
+
+    def test_structured_review_schema_is_only_sent_when_requested(self):
+        type(self).response = {"done": True, "message": {"content": '{"edits":[]}'}}
+        schema = {"type": "object", "properties": {"edits": {"type": "array"}}}
+        self.client("ollama").complete([], response_schema=schema)
+        self.assertEqual(json.loads(self.requests[-1][2])["format"], schema)
+
+    def test_full_endpoint_urls_are_normalized_without_redirects(self):
+        self.assertEqual(
+            ProviderConfig("api", "https://example.org/v1/chat/completions").base_url(),
+            "https://example.org/v1",
+        )
+        self.assertEqual(ProviderConfig(url=self.url + "/api/chat").base_url(), self.url)
+
+    def test_local_generation_deadline_must_be_finite_and_bounded(self):
+        for limit in (0, 1801, float("inf"), float("nan")):
+            self.assertRaises(ProviderError, ProviderConfig(generation_timeout=limit).base_url)
 
 
 if __name__ == "__main__":

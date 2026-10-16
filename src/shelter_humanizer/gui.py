@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import difflib
+import json
 import queue
 import threading
 import tkinter as tk
 import urllib.parse
 import webbrowser
+from dataclasses import replace
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -15,12 +17,18 @@ from . import __version__
 from .appearance import PALETTES, configure_styles
 from .clipboard import read as read_clipboard
 from .clipboard import write as write_clipboard
-from .files import read_text, write_report, write_text
+from .diagnostics import snapshot as diagnostic_snapshot
+from .documents import DocumentPaused, rewrite_document, split_document
+from .files import TextEncodingError, read_text, write_report, write_text
+from .instance import SingleInstance
 from .local_models import DEFAULT_MODEL
 from .local_setup import LocalSetup
 from .managed_runtime import ManagedRuntime
 from .models import Result, validate_text
-from .prompts import copy_prompt
+from .panels import ScrollArea, fit_dialog
+from .preferences import Preferences, validate_instruction
+from .prompts import SYSTEM, copy_prompt
+from .protection import fact_changes
 from .providers import Client, ProviderConfig
 from .service import Cancelled, analyze, compare, offline, rewrite
 from .style import GENRES
@@ -47,28 +55,39 @@ SAMPLE = (
 
 
 class App:
-    def __init__(self, root: tk.Tk, *, auto_connect=True):
+    def __init__(self, root: tk.Tk, *, auto_connect=True, preferences=None):
         self.root = root
         root.title(f"Shelter Humanizer · {__version__}")
-        width = max(960, min(1260, root.winfo_screenwidth() - 80))
-        height = max(620, min(860, root.winfo_screenheight() - 100))
+        available_width = max(760, root.winfo_screenwidth() - 50)
+        available_height = max(480, root.winfo_screenheight() - 100)
+        width = min(1260, available_width)
+        height = min(860, available_height)
         root.geometry(f"{width}x{height}")
-        root.minsize(960, 620)
-        root.protocol("WM_DELETE_WINDOW", self.close)
+        root.minsize(min(960, available_width), min(620, available_height))
+        root.protocol("WM_DELETE_WINDOW", self.request_close)
         self.closed = False
         self.events = queue.Queue()
         self.model_requests = {}
+        self.health_requests = {}
+        self.last_diagnostics = diagnostic_snapshot()
+        self.document_session = None
         self.local_wizard = None
         self.runtime = ManagedRuntime()
+        self.preferences = preferences or Preferences()
+        saved = self.preferences.load() if auto_connect or preferences is not None else {}
+        self.instruction = saved.get("instruction")
         self.managed_connection = False
         self.cancel = threading.Event()
         self.busy = False
         self.revision = 0
         self.result = None
+        self.pending_result = None
+        self.job_output_snapshot = None
+        self.saved_output = ""
         self.analysis_snapshot = None
         self.findings = {}
         self.configs = {
-            "ollama": ProviderConfig(),
+            "ollama": ProviderConfig(timeout=180, inspect_model=True),
             "api": ProviderConfig("api", "https://openrouter.ai/api/v1"),
         }
         self.voice = ""
@@ -80,6 +99,7 @@ class App:
         self.genre = tk.StringVar(value=GENRES["plain"])
         self.depth = tk.StringVar(value=EDIT_CHOICES["edit"])
         self.second_pass = tk.BooleanVar(value=True)
+        self.long_mode = tk.BooleanVar(value=False)
         self.spaces = tk.BooleanVar(value=True)
         self.confusables = tk.BooleanVar(value=False)
         self.nfc = tk.BooleanVar(value=True)
@@ -214,7 +234,7 @@ class App:
         toolbar.pack(fill="x", pady=(0, 8))
         ttk.Button(toolbar, text="Вставить", command=self.paste).pack(side="left", padx=(0, 6))
         ttk.Button(toolbar, text="Открыть TXT", command=self.load).pack(side="left", padx=6)
-        ttk.Button(toolbar, text="Пример", command=lambda: self.set_source(SAMPLE)).pack(
+        ttk.Button(toolbar, text="Пример", command=lambda: self.replace_source(SAMPLE)).pack(
             side="left", padx=6
         )
         ttk.Label(toolbar, textvariable=self.count, style="Muted.TLabel").pack(side="right")
@@ -387,8 +407,21 @@ class App:
         self.revision += 1
         self.findings.clear()
         self.analysis_snapshot = None
+        self.document_session = None
         self.count.set(f"{len(text):,} символов")
         self.status.set("Исходник обновлён. Запустите обработку.")
+
+    def replace_source(self, text):
+        current = self.get_text(self.source)
+        if current.strip() and current != text:
+            if not messagebox.askyesno(
+                "Заменить исходный текст?",
+                "Текущий исходник будет заменён. Результат останется справа. Продолжить?",
+                parent=self.root,
+            ):
+                return False
+        self.set_source(text)
+        return True
 
     def _source_changed(self, event=None):
         if self.source.edit_modified():
@@ -398,6 +431,7 @@ class App:
             self.source.tag_remove("finding", "1.0", "end")
             self.findings.clear()
             self.analysis_snapshot = None
+            self.document_session = None
             if self.result is not None:
                 self.status.set(
                     "Исходник изменён. Показанный результат относится к предыдущему тексту."
@@ -442,7 +476,8 @@ class App:
         hide_tooltips(self.root)
         window = tk.Toplevel(self.root)
         window.title(title)
-        window.geometry(geometry)
+        width, height = map(int, geometry.split("x"))
+        fit_dialog(window, width, height)
         window.configure(background=self.colors["bg"])
         window.transient(self.root)
         window.grab_set()
@@ -454,6 +489,11 @@ class App:
         window = self.dialog("Способ обработки", "620x475")
         frame = ttk.Frame(window, padding=22)
         frame.pack(fill="both", expand=True)
+        buttons = ttk.Frame(frame)
+        buttons.pack(side="bottom", fill="x", pady=(15, 0))
+        area = ScrollArea(frame)
+        area.pack(fill="both", expand=True)
+        frame = area.body
         ttk.Label(frame, text="Как обрабатывать текст", style="Heading.TLabel").pack(anchor="w")
         for key, title, hint in (
             (
@@ -482,8 +522,6 @@ class App:
         ttk.Label(
             frame, textvariable=self.connection_note, wraplength=570, style="Muted.TLabel"
         ).pack(fill="x")
-        buttons = ttk.Frame(frame)
-        buttons.pack(side="bottom", fill="x", pady=(15, 0))
 
         def open_next(action):
             window.destroy()
@@ -506,12 +544,14 @@ class App:
         window = self.dialog("Настройки текста", "610x565")
         frame = ttk.Frame(window, padding=22)
         frame.pack(fill="both", expand=True)
+        footer = ttk.Frame(frame)
+        footer.pack(side="bottom", fill="x", pady=(12, 0))
         tabs = ttk.Notebook(frame)
         tabs.pack(fill="both", expand=True)
-        text = ttk.Frame(tabs, padding=18)
-        symbols = ttk.Frame(tabs, padding=18)
-        tabs.add(text, text="Текст и стиль")
-        tabs.add(symbols, text="Очистка символов")
+        text_area, symbols_area = ScrollArea(tabs), ScrollArea(tabs)
+        text, symbols = text_area.body, symbols_area.body
+        tabs.add(text_area, text="Текст и стиль")
+        tabs.add(symbols_area, text="Очистка символов")
         ttk.Label(text, text="Тип текста", style="Heading.TLabel").pack(anchor="w", pady=(0, 7))
         ttk.Combobox(
             text, textvariable=self.genre, values=tuple(GENRES.values()), state="readonly"
@@ -549,6 +589,39 @@ class App:
             wraplength=480,
             style="Muted.TLabel",
         ).pack(fill="x", pady=5)
+        advanced_area = ScrollArea(tabs)
+        advanced = advanced_area.body
+        tabs.add(advanced_area, text="Расширенные")
+        ttk.Label(
+            advanced,
+            text="Необязательно. Без изменений используются предустановки IT Shelter.",
+            wraplength=450,
+        ).pack(fill="x", pady=10)
+        ttk.Button(
+            advanced,
+            text="Своя редакторская инструкция…",
+            command=lambda: (window.destroy(), self.instruction_settings()),
+        ).pack(fill="x", pady=8)
+        ttk.Button(
+            advanced,
+            text="Свои модели и установка…",
+            command=lambda: (window.destroy(), self.setup_local()),
+        ).pack(fill="x", pady=8)
+        ttk.Checkbutton(
+            advanced,
+            text="Длинный текст: обрабатывать частями с подтверждением",
+            variable=self.long_mode,
+        ).pack(anchor="w", pady=8)
+        ttk.Label(
+            advanced,
+            text="Все части обрабатываются по порядку. После сбоя можно продолжить, пока приложение открыто. Число запросов и стоимость API увеличатся.",
+            wraplength=450,
+        ).pack(fill="x", pady=5)
+        ttk.Button(
+            advanced,
+            text="Диагностика и проверка ИИ…",
+            command=lambda: (window.destroy(), self.diagnostics_settings()),
+        ).pack(fill="x", pady=8)
         ttk.Label(
             symbols,
             text="Скрытые знаки убираются автоматически. Замена спецпробелов и нормализация букв уже включены; любую опцию можно отключить.",
@@ -582,7 +655,7 @@ class App:
             wraplength=480,
             style="Muted.TLabel",
         ).pack(fill="x", pady=20)
-        ttk.Button(frame, text="Готово", command=window.destroy).pack(anchor="e", pady=(12, 0))
+        ttk.Button(footer, text="Готово", command=window.destroy).pack(anchor="e")
         attach_help(window, lambda: self.colors)
 
     def chat_workflow(self):
@@ -681,7 +754,9 @@ class App:
         if not self.managed_connection and self.configs["ollama"].model:
             return  # Preserve an explicitly configured external Ollama connection.
         if self.runtime.process is not None and self.runtime.process.poll() is None:
-            self.configs["ollama"] = ProviderConfig(url=self.runtime.url, model=model, timeout=180)
+            self.configs["ollama"] = ProviderConfig(
+                url=self.runtime.url, model=model, timeout=180, inspect_model=True
+            )
             self.managed_connection = True
             self._mode_changed()
             return
@@ -714,7 +789,7 @@ class App:
         try:
             text = read_clipboard(self.root)
             validate_text(text)
-            self.set_source(text)
+            self.replace_source(text)
         except (tk.TclError, ValueError) as exc:
             self.error(
                 str(exc)
@@ -728,9 +803,52 @@ class App:
         )
         if path:
             try:
-                self.set_source(read_text(path))
+                self.replace_source(read_text(path))
+            except TextEncodingError:
+                self.encoding_dialog(path)
             except (ValueError, OSError) as exc:
                 self.error(str(exc))
+
+    def encoding_dialog(self, path):
+        window = self.dialog("Импорт TXT · выберите кодировку", "760x590")
+        footer = ttk.Frame(window, padding=14)
+        footer.pack(side="bottom", fill="x")
+        ttk.Label(
+            window,
+            text="Файл не прочитан как UTF-8. Проверьте предпросмотр перед импортом. Исходный файл не изменяется.",
+            wraplength=670,
+            padding=14,
+        ).pack(fill="x")
+        encoding = tk.StringVar(master=window, value="cp1251")
+        ttk.Combobox(
+            window,
+            textvariable=encoding,
+            values=("cp1251", "utf-8-sig", "utf-16-le", "utf-16-be"),
+            state="readonly",
+        ).pack(fill="x", padx=14)
+        frame = ttk.Frame(window, padding=14)
+        frame.pack(fill="both", expand=True)
+        preview = self.text_box(frame)
+        value = {"text": None}
+
+        def read():
+            try:
+                value["text"] = read_text(path, encoding.get())
+                self.replace_text(preview, value["text"], readonly=True)
+            except (ValueError, OSError):
+                value["text"] = None
+                self.replace_text(
+                    preview, "Не удалось прочитать файл с выбранной кодировкой.", readonly=True
+                )
+
+        def apply():
+            if value["text"] is not None and self.replace_source(value["text"]):
+                window.destroy()
+
+        encoding.trace_add("write", lambda *args: read())
+        ttk.Button(footer, text="Импортировать этот текст", command=apply).pack(side="right")
+        ttk.Button(footer, text="Отмена", command=window.destroy).pack(side="left")
+        read()
 
     def set_busy(self, value):
         self.busy = value
@@ -753,16 +871,31 @@ class App:
         options = CleanOptions(self.spaces.get(), self.confusables.get(), self.nfc.get())
         config, voice, terms = self.configs.get(mode), self.voice, self.terms
         second_pass = self.second_pass.get()
+        instruction = self.instruction
+        long_mode, session = self.long_mode.get(), self.document_session
         try:
             validate_text(text)
             if not text.strip():
                 raise ValueError("Сначала вставьте текст или откройте пример.")
             if action == "edit" and mode != "offline":
                 config.validate()
+                if len(text) > 12000 and not long_mode:
+                    raise ValueError(
+                        "Для ИИ-редактуры свыше 12 000 символов включите «Длинный текст» в Настройки текста → Расширенные."
+                    )
+                if long_mode and len(text) > 6000:
+                    count = len(split_document(text, terms=terms))
+                    if not messagebox.askyesno(
+                        "Обработать документ частями?",
+                        f"Частей: {count}. Запросов к ИИ: до {count * (2 if second_pass else 1)}. При API это может стоить дороже.\n\nУспешные части сохраняются в памяти до закрытия. Если настройки изменились, обработка начнётся заново. Продолжить?",
+                        parent=self.root,
+                    ):
+                        return
         except ValueError as exc:
             self.error(str(exc))
             return
         revision = self.revision
+        self.job_output_snapshot = self.get_text(self.output)
         self.cancel = threading.Event()
         cancel = self.cancel
         events = self.events
@@ -770,6 +903,30 @@ class App:
         self.status.set("Обработка…")
 
         def worker():
+            client = None
+            stage = "editing"
+
+            def progress(message):
+                nonlocal stage
+                stage = (
+                    "proofreading"
+                    if "вычит" in message.lower()
+                    else "checking"
+                    if "провер" in message.lower() or "очища" in message.lower()
+                    else "editing"
+                )
+                events.put(("progress", revision, message))
+
+            def diagnostics(error_code="none", phase="complete"):
+                details = diagnostic_snapshot(
+                    config if mode != "offline" else None,
+                    getattr(client, "last_stats", {}),
+                    error_code=error_code,
+                    phase=phase,
+                    custom_instruction=instruction is not None,
+                )
+                events.put(("diagnostics", revision, details))
+
             try:
                 if action == "analyze":
                     value = analyze(text, genre)
@@ -781,25 +938,52 @@ class App:
                         url = self.runtime.start(
                             cancel, lambda message: events.put(("progress", revision, message))
                         )
-                        active_config = ProviderConfig(url=url, model=config.model, timeout=180)
-                    value = rewrite(
-                        text,
-                        Client(active_config),
+                        active_config = replace(config, url=url, timeout=180, inspect_model=True)
+                    client = Client(
+                        active_config,
+                        cancel=cancel,
+                        progress=lambda message: events.put(("progress", revision, message)),
+                    )
+                    settings = dict(
                         genre=genre,
                         voice=voice,
                         terms=terms,
                         second_pass=second_pass,
                         depth=depth,
                         options=options,
-                        cancel=cancel,
-                        progress=lambda message: events.put(("progress", revision, message)),
+                        instruction=instruction,
                     )
+                    if long_mode and len(text) > 6000:
+                        value, completed_session = rewrite_document(
+                            text,
+                            client,
+                            session=session,
+                            cancel=cancel,
+                            progress=progress,
+                            **settings,
+                        )
+                        events.put(("checkpoint", revision, completed_session))
+                    else:
+                        value = rewrite(
+                            text,
+                            client,
+                            cancel=cancel,
+                            progress=progress,
+                            **settings,
+                        )
                 if cancel.is_set():
                     raise Cancelled("Обработка отменена. Исходник сохранён.")
+                diagnostics()
                 events.put(("done", revision, (action, value)))
+            except DocumentPaused as exc:
+                events.put(("checkpoint", revision, exc.session))
+                diagnostics("document_paused", stage)
+                events.put(("error", revision, str(exc)))
             except (ValueError, OSError) as exc:
+                diagnostics(getattr(exc, "code", "operation_error"), stage)
                 events.put(("error", revision, str(exc)))
             except Exception:
+                diagnostics("operation_error", stage)
                 # Do not expose provider response bodies or secrets in a traceback.
                 events.put(
                     ("error", revision, "Не удалось завершить обработку. Исходник сохранён.")
@@ -815,6 +999,28 @@ class App:
         try:
             while True:
                 kind, revision, value = self.events.get_nowait()
+                if kind == "diagnostics":
+                    if revision == self.revision:
+                        self.last_diagnostics = value
+                    continue
+                if kind == "checkpoint":
+                    if revision == self.revision:
+                        self.document_session = value
+                    continue
+                if kind == "health":
+                    token, details = value
+                    request = self.health_requests.pop(token, None)
+                    if request:
+                        window, box, button, token_cancel = request
+                        if window.winfo_exists():
+                            self.last_diagnostics = details
+                            self.replace_text(
+                                box,
+                                json.dumps(details, ensure_ascii=False, indent=2),
+                                readonly=True,
+                            )
+                            button.configure(state="normal")
+                    continue
                 if kind == "managed":
                     model, url, error = value
                     if self.cancel.is_set():
@@ -822,7 +1028,9 @@ class App:
                         self.status.set("Запуск локального ИИ отменён.")
                         continue
                     if not error:
-                        self.configs["ollama"] = ProviderConfig(url=url, model=model, timeout=180)
+                        self.configs["ollama"] = ProviderConfig(
+                            url=url, model=model, timeout=180, inspect_model=True
+                        )
                         self.managed_connection = True
                     self.set_busy(False)
                     self.status.set(error or "Локальный ИИ готов к работе.")
@@ -875,17 +1083,23 @@ class App:
                             f"Проверено: символы — {len(result.unicode)}, стиль — {len(result.style)}. Исходник сохранён."
                         )
                     else:
-                        self.show_result(result)
+                        if (
+                            self.job_output_snapshot is not None
+                            and self.get_text(self.output) != self.job_output_snapshot
+                        ):
+                            self.pending_result = result
+                            self.offer_pending_result()
+                        else:
+                            self.show_result(result)
+                    self.job_output_snapshot = None
         except queue.Empty:
             pass
         self.poll_id = self.root.after(80, self._poll)
 
     def cancel_run(self):
         self.cancel.set()
-        config = self.configs.get(self.mode.get())
-        timeout = int(config.timeout) if config is not None else 60
         self.status.set(
-            f"Отмена запрошена. Сетевой запрос может ждать до {timeout} секунд; результат не будет применён."
+            "Отмена запрошена. Соединение закрывается; исходник и предыдущий результат сохраняются."
         )
 
     def show_findings(self, analysis):
@@ -952,11 +1166,17 @@ class App:
             )
         else:
             self.result_note.set("Готово. Сравните правки; текст можно редактировать.")
-        if any(
+        if "review_incomplete" in result.flags and not fact_changes(result.original, result.text):
+            self.result_note.set(
+                "Вычитка не завершилась. Первая редактура сохранена; проверьте её."
+            )
+            self.toggle_details(True)
+            self.tabs.select(3)
+        elif any(
             not warning.startswith("Сравните смысл и авторский тон") for warning in result.warnings
         ):
             self.result_note.set(
-                "Есть замечания к изменениям смысла. Проверьте их перед копированием."
+                "Результат требует проверки. Откройте замечания перед копированием."
             )
             self.toggle_details(True)
             self.tabs.select(3)
@@ -997,14 +1217,76 @@ class App:
             raise ValueError(
                 "Сначала обработайте текст. Ответ из внешнего чата можно вставить справа и нажать «Проверить правки»."
             )
-        return compare(
-            self.result.original, self.get_text(self.output), self.genre_key(), self.result.mode
+        result = compare(
+            self.result.original,
+            self.get_text(self.output),
+            self.genre_key(),
+            self.result.mode,
+            depth=self.result.depth,
         )
+        result.processing_warnings = list(self.result.processing_warnings)
+        result.flags = list(
+            dict.fromkeys(
+                result.flags
+                + [
+                    flag
+                    for flag in self.result.flags
+                    if flag not in ("content_shortened", "list_changed", "language_changed")
+                ]
+            )
+        )
+        if result.text == self.result.text:
+            result.quality_warnings = list(self.result.quality_warnings)
+            result.flags = list(self.result.flags)
+        if result.text != self.result.text:
+            result.flags.append("manual_edit")
+            result.processing_warnings.append("Результат изменён вручную после обработки.")
+        result.flags = list(dict.fromkeys(result.flags))
+        result.warnings = list(
+            dict.fromkeys(
+                fact_changes(result.original, result.text)
+                + result.quality_warnings
+                + result.processing_warnings
+            )
+        )
+        return result
+
+    def offer_pending_result(self):
+        result = self.pending_result
+        window = self.dialog("Новый ответ готов · ручные правки сохранены", "720x540")
+        ttk.Label(
+            window,
+            text="Вы изменили результат во время ожидания. Ваш текст остался в главном окне.",
+            wraplength=650,
+            padding=14,
+        ).pack(fill="x")
+        buttons = ttk.Frame(window, padding=14)
+        buttons.pack(side="bottom", fill="x")
+        box = self.text_box(window)
+        self.replace_text(box, result.text, readonly=True)
+
+        def apply():
+            if self.get_text(self.source) != result.original:
+                self.error("Исходник уже изменился. Ответ можно скопировать из этого окна.")
+                return
+            self.show_result(result)
+            self.pending_result = None
+            window.destroy()
+
+        ttk.Button(buttons, text="Оставить мои правки", command=window.destroy).pack(side="left")
+        ttk.Button(
+            buttons, text="Копировать новый ответ", command=lambda: self.clipboard(result.text)
+        ).pack(side="left", padx=8)
+        ttk.Button(buttons, text="Применить новый ответ", command=apply).pack(side="right")
+        self.status.set("Новый ответ готов. Ручные изменения сохранены; выберите нужный вариант.")
 
     def review_result(self):
         try:
             original = self.get_text(self.source)
-            self.result = compare(original, self.get_text(self.output), self.genre_key())
+            if self.result is not None and self.result.original == original:
+                self.result = self.current_result()
+            else:
+                self.result = compare(original, self.get_text(self.output), self.genre_key())
             self.update_review(self.result)
             self.toggle_details(True)
             self.tabs.select(3)
@@ -1037,7 +1319,12 @@ class App:
             if not text.strip():
                 raise ValueError("Сначала вставьте текст.")
             task = copy_prompt(
-                text, self.genre_key(), self.voice, depth=self.depth_key(), terms=self.terms
+                text,
+                self.genre_key(),
+                self.voice,
+                depth=self.depth_key(),
+                terms=self.terms,
+                instruction=self.instruction,
             )
             self.last_chat_prompt = task
             self.last_chat_source = text
@@ -1051,20 +1338,23 @@ class App:
             self.error(str(exc))
             return False
 
-    def save(self):
-        text = self.get_text(self.output)
+    def save(self, text_override=None):
+        text = self.get_text(self.output) if text_override is None else text_override
         if not text:
             self.error("Справа пока нет результата.")
-            return
+            return False
         path = filedialog.asksaveasfilename(
             parent=self.root, defaultextension=".txt", filetypes=[("Текст UTF-8", "*.txt")]
         )
         if path:
             try:
                 write_text(path, text)
+                self.saved_output = text
                 self.status.set("Результат сохранён в UTF-8 TXT.")
+                return True
             except (ValueError, OSError) as exc:
                 self.error(str(exc))
+        return False
 
     def report(self):
         try:
@@ -1095,14 +1385,12 @@ class App:
         if kind == "offline" or self.busy:
             return
         config = self.configs[kind]
-        window = tk.Toplevel(self.root)
-        window.configure(background=self.colors["bg"])
-        window.title("Подключение к ИИ")
-        window.geometry("620x460")
-        window.transient(self.root)
-        window.grab_set()
-        frame = ttk.Frame(window, padding=20)
-        frame.pack(fill="both", expand=True)
+        window = self.dialog("Подключение к ИИ", "680x570")
+        footer = ttk.Frame(window, padding=14)
+        footer.pack(side="bottom", fill="x")
+        area = ScrollArea(window)
+        area.pack(fill="both", expand=True)
+        frame = area.body
         url, model, key = (
             tk.StringVar(value=config.url),
             # Prefill only the dialog: an unapplied default must not block owned-runtime reconnect.
@@ -1176,13 +1464,43 @@ class App:
             wraplength=575,
             style="Muted.TLabel",
         ).pack(anchor="w")
+        streaming = tk.BooleanVar(master=window, value=config.streaming)
+        adaptive = tk.BooleanVar(master=window, value=config.adaptive_context)
+        if kind == "api":
+            ttk.Checkbutton(frame, text="Потоковый ответ (SSE)", variable=streaming).pack(
+                anchor="w", pady=6
+            )
+            ttk.Label(
+                frame,
+                text="Если сервис не поддерживает потоковый режим, отключите его и повторите запрос вручную.",
+                wraplength=540,
+                style="Muted.TLabel",
+            ).pack(fill="x")
+        else:
+            ttk.Checkbutton(
+                frame, text="Подбирать контекст по объёму задания", variable=adaptive
+            ).pack(anchor="w", pady=6)
+            ttk.Label(
+                frame,
+                text="Оценка с запасом, а не точный подсчёт токенов. Для длинного текста используйте обработку частями.",
+                wraplength=540,
+                style="Muted.TLabel",
+            ).pack(fill="x")
 
         def save():
             candidate = ProviderConfig(
-                kind, url.get(), model.get().strip(), key.get().strip(), config.timeout
+                kind,
+                url.get(),
+                model.get().strip(),
+                key.get().strip(),
+                config.timeout,
+                inspect_model=kind == "ollama",
+                adaptive_context=adaptive.get(),
+                streaming=streaming.get(),
             )
             try:
                 candidate.validate()
+                candidate = replace(candidate, url=candidate.base_url())
                 self.configs[kind] = candidate
                 if kind == "ollama":
                     self.managed_connection = False
@@ -1192,7 +1510,7 @@ class App:
             except ValueError as exc:
                 messagebox.showerror("Проверьте настройки", str(exc), parent=window)
 
-        ttk.Button(frame, text="Применить", style="Accent.TButton", command=save).pack(
+        ttk.Button(footer, text="Применить", style="Accent.TButton", command=save).pack(
             anchor="e", pady=12
         )
         attach_help(window, lambda: self.colors)
@@ -1207,7 +1525,9 @@ class App:
             return
 
         def ready(model, url):
-            self.configs["ollama"] = ProviderConfig(url=url, model=model, timeout=180)
+            self.configs["ollama"] = ProviderConfig(
+                url=url, model=model, timeout=180, inspect_model=True
+            )
             self.managed_connection = True
             self.mode.set("ollama")
             self._mode_changed()
@@ -1217,14 +1537,12 @@ class App:
 
     def voice_settings(self):
         hide_tooltips(self.root)
-        window = tk.Toplevel(self.root)
-        window.configure(background=self.colors["bg"])
-        window.title("Стиль и важные слова")
-        window.geometry("650x530")
-        window.transient(self.root)
-        window.grab_set()
-        frame = ttk.Frame(window, padding=20)
-        frame.pack(fill="both", expand=True)
+        window = self.dialog("Стиль и важные слова", "700x580")
+        footer = ttk.Frame(window, padding=14)
+        footer.pack(side="bottom", fill="x")
+        area = ScrollArea(window)
+        area.pack(fill="both", expand=True)
+        frame = area.body
         ttk.Label(frame, text="Образец вашего текста · необязательно, до 3000 символов").pack(
             anchor="w", pady=6
         )
@@ -1255,7 +1573,7 @@ class App:
             except ValueError as exc:
                 messagebox.showerror("Проверьте текст", str(exc), parent=window)
 
-        ttk.Button(frame, text="Применить", command=save).pack(anchor="e")
+        ttk.Button(footer, text="Применить", command=save).pack(anchor="e")
         attach_help(window, lambda: self.colors)
 
     def help(self):
@@ -1287,8 +1605,183 @@ class App:
         self.root.update_idletasks()
         self.root.destroy()
 
+    def request_close(self):
+        source, output = self.get_text(self.source), self.get_text(self.output)
+        if source.strip() or (output.strip() and output != self.saved_output):
+            answer = messagebox.askyesnocancel(
+                "Закрыть Shelter Humanizer?",
+                "Тексты не сохраняются автоматически.\n\nДа — сохранить результат в TXT (или исходник, если результат пуст) и закрыть.\nНет — закрыть без сохранения.\nОтмена — остаться в приложении.",
+                parent=self.root,
+            )
+            if answer is None:
+                return
+            if answer:
+                if not self.save(text_override=output if output.strip() else source):
+                    return
+        self.close()
+
+    def diagnostics_settings(self):
+        if self.busy:
+            self.status.set("Дождитесь обработки или отмените её перед проверкой подключения.")
+            return
+        window = self.dialog("Диагностика · без текстов и ключей", "780x590")
+        footer = ttk.Frame(window, padding=14)
+        footer.pack(side="bottom", fill="x")
+        ttk.Label(
+            window,
+            text="Проверка не отправляет текст на генерацию. Диагностика не содержит исходника, инструкции, API-ключей или личных путей.",
+            wraplength=690,
+            padding=14,
+        ).pack(fill="x")
+        body = ttk.Frame(window, padding=14)
+        body.pack(fill="both", expand=True)
+        box = self.text_box(body)
+        self.replace_text(
+            box, json.dumps(self.last_diagnostics, ensure_ascii=False, indent=2), readonly=True
+        )
+
+        def check():
+            mode, config = self.mode.get(), self.configs.get(self.mode.get())
+            if mode == "offline":
+                self.last_diagnostics = diagnostic_snapshot()
+                self.replace_text(
+                    box,
+                    json.dumps(self.last_diagnostics, ensure_ascii=False, indent=2),
+                    readonly=True,
+                )
+                return
+            button.configure(state="disabled")
+            cancel, token = threading.Event(), object()
+            self.health_requests[token] = (window, box, button, cancel)
+            managed = self.managed_connection and mode == "ollama"
+
+            def worker():
+                checked = config
+                stats, error = {}, "none"
+                try:
+                    if managed:
+                        checked = replace(config, url=self.runtime.start(cancel, lambda text: None))
+                    checked = replace(checked, timeout=5, inspect_model=False)
+                    client = Client(checked, cancel=cancel)
+                    models = client.models()
+                    name = checked.model if ":" in checked.model else checked.model + ":latest"
+                    if checked.model not in models and name not in models:
+                        error = "model_not_listed"
+                    if mode == "ollama":
+                        client.prepare_model()
+                        for item in client.running():
+                            if isinstance(item, dict) and item.get("name") in (checked.model, name):
+                                for old, new in (
+                                    ("size", "model_memory_mib"),
+                                    ("size_vram", "model_vram_mib"),
+                                ):
+                                    if type(item.get(old)) is int:
+                                        stats[new] = item[old] // 1024**2
+                                stats["loaded_context_tokens"] = item.get("context_length")
+                except (ValueError, OSError) as exc:
+                    error = getattr(exc, "code", "connection_error")
+                details = diagnostic_snapshot(
+                    checked,
+                    stats,
+                    error_code=error,
+                    phase="connection",
+                    custom_instruction=self.instruction is not None,
+                )
+                self.events.put(("health", 0, (token, details)))
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        button = ttk.Button(footer, text="Проверить подключение", command=check)
+        button.pack(side="left")
+        ttk.Button(
+            footer,
+            text="Копировать диагностику",
+            command=lambda: self.clipboard(
+                json.dumps(self.last_diagnostics, ensure_ascii=False, indent=2)
+            ),
+        ).pack(side="left", padx=8)
+        ttk.Button(footer, text="Закрыть", command=window.destroy).pack(side="right")
+
+        def closed(event):
+            if event.widget is window:
+                for token, request in list(self.health_requests.items()):
+                    if request[0] is window:
+                        request[3].set()
+                        self.health_requests.pop(token, None)
+
+        window.bind("<Destroy>", closed, add="+")
+
+    def instruction_settings(self):
+        window = self.dialog("Расширенные · редакторская инструкция", "820x650")
+        footer = ttk.Frame(window, padding=14)
+        footer.pack(side="bottom", fill="x")
+        ttk.Label(
+            window,
+            text="Изменяет инструкцию первого прохода и задание для внешнего чата. Защита данных и вычитка остаются включены. До 12 000 символов.",
+            wraplength=720,
+            padding=14,
+        ).pack(fill="x")
+        body = ttk.Frame(window, padding=14)
+        body.pack(fill="both", expand=True)
+        editor = self.text_box(body)
+        self.replace_text(editor, self.instruction or SYSTEM)
+        persist = tk.BooleanVar(master=window, value=bool(self.preferences.load()))
+        ttk.Checkbutton(
+            footer, text="Сохранить инструкцию на этом компьютере (обычный текст)", variable=persist
+        ).pack(anchor="w", pady=6)
+        controls = ttk.Frame(footer)
+        controls.pack(fill="x")
+
+        def apply():
+            try:
+                value = validate_instruction(self.get_text(editor))
+                value = None if value == SYSTEM else value
+                self.preferences.save(value if persist.get() else None)
+                self.instruction = value
+                self.status.set(
+                    "Инструкция IT Shelter восстановлена."
+                    if value is None
+                    else "Своя инструкция применена. Защита данных остаётся включена."
+                )
+                window.destroy()
+            except (ValueError, OSError):
+                self.error(
+                    "Не удалось применить инструкцию. Проверьте длину и доступ к папке настроек."
+                )
+
+        ttk.Button(
+            controls,
+            text="Вернуть предустановку",
+            command=lambda: self.replace_text(editor, SYSTEM),
+        ).pack(side="left")
+        ttk.Button(controls, text="Отмена", command=window.destroy).pack(side="right", padx=8)
+        ttk.Button(controls, text="Применить", command=apply).pack(side="right")
+
 
 def launch():
-    root = tk.Tk()
-    App(root)
-    root.mainloop()
+    try:
+        guard = SingleInstance()
+    except OSError:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(
+            "Не удалось открыть Shelter Humanizer",
+            "Не удалось проверить уже открытое приложение. Закройте его другие окна "
+            "и запустите снова с обычными правами пользователя.",
+            parent=root,
+        )
+        root.destroy()
+        return
+    with guard as instance:
+        root = tk.Tk()
+        if not instance.owned:
+            root.withdraw()
+            messagebox.showinfo(
+                "Shelter Humanizer уже открыт",
+                "Используйте уже открытое окно приложения. Второй локальный ИИ не запускается.",
+                parent=root,
+            )
+            root.destroy()
+            return
+        App(root)
+        root.mainloop()

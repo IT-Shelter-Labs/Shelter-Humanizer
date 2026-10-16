@@ -1,6 +1,7 @@
 """Explicit model download through a loopback Ollama; no bundled weights or installers."""
 
 import json
+import re
 import socket
 import time
 import urllib.error
@@ -32,7 +33,7 @@ PRESETS = (
         "deepseek-r1:8b-0528-qwen3-q4_K_M",
         "DeepSeek R1 · 8B (0528) — альтернатива",
         "около 5,2 ГБ",
-        "На базе Qwen3 8B, выпуск мая 2025 года. Желательно от 24 ГБ оперативной памяти или подходящая видеокарта. Сначала рассуждает, поэтому на CPU может работать долго и не уложиться в таймаут 180 секунд. Начните с короткого текста и вычитайте результат.",
+        "На базе Qwen3 8B, выпуск мая 2025 года. Желательно от 24 ГБ оперативной памяти или подходящая видеокарта. Сначала рассуждает, поэтому на CPU может работать долго. Лимит — до 15 минут на проход; начните с короткого текста и вычитайте результат.",
     ),
     ModelPreset(
         "qwen3:1.7b",
@@ -52,6 +53,27 @@ MAX_LINE = 64 * 1024
 
 class DownloadCancelled(ValueError):
     pass
+
+
+def model_tag(value):
+    if (
+        not isinstance(value, str)
+        or len(value) > 160
+        or not re.fullmatch(
+            r"(?:[A-Za-z0-9][A-Za-z0-9_.-]*/)?[A-Za-z0-9][A-Za-z0-9_.-]*(?::[A-Za-z0-9][A-Za-z0-9_.-]*)?",
+            value,
+        )
+        or ".." in value
+    ):
+        raise ProviderError(
+            "Нужно имя модели Ollama: например qwen3.5:4b или author/model:tag. URL и команды не принимаются."
+        )
+    tag = value.rsplit(":", 1)[-1].lower() if ":" in value else "latest"
+    if tag == "cloud" or tag.endswith("-cloud"):
+        raise ProviderError(
+            "Встроенный ИИ поддерживает локальные модели. Для облачной модели настройте API."
+        )
+    return value if ":" in value else value + ":latest"
 
 
 def stream_records(response, cancel, started):
@@ -84,9 +106,12 @@ def stream_records(response, cancel, started):
             return
 
 
-def pull_model(model, cancel, progress, url="http://localhost:11434", timeout=30):
-    if model not in {p.name for p in PRESETS}:
+def pull_model(
+    model, cancel, progress, url="http://localhost:11434", timeout=30, *, allow_custom=False
+):
+    if not allow_custom and model not in {p.name for p in PRESETS}:
         raise ProviderError("Выберите модель из списка установщика.")
+    model = model_tag(model)
     base = ProviderConfig(url=url, timeout=timeout).base_url()
     parsed = urllib.parse.urlsplit(base)
     if parsed.hostname not in ("localhost", "127.0.0.1", "::1") or parsed.path not in ("", "/"):

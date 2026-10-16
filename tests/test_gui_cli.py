@@ -17,6 +17,7 @@ from shelter_humanizer.clipboard import read as read_clipboard
 from shelter_humanizer.gui import EDIT_CHOICES, SAMPLE, TELEGRAM_URL, App
 from shelter_humanizer.local_models import PRESETS
 from shelter_humanizer.managed_runtime import ManagedRuntime
+from shelter_humanizer.providers import ProviderError
 from shelter_humanizer.selftest import SMOKE_TEXT
 from shelter_humanizer.service import compare, offline
 from shelter_humanizer.ui_helpers import shortcut_action
@@ -149,8 +150,7 @@ class GuiTests(unittest.TestCase):
             for w in self.root.winfo_children()
             if isinstance(w, tk.Toplevel) and w is not self.app.review_window
         )
-        frame = window.winfo_children()[0]
-        chooser = next(w for w in frame.winfo_children() if isinstance(w, ttk.Combobox))
+        chooser = next(w for w in self.descendants(window) if isinstance(w, ttk.Combobox))
         # A dialog created after a theme switch must use that palette, too.
         self.assertEqual(window.cget("background"), self.app.colors["bg"])
         self.app.apply_theme("light")
@@ -341,9 +341,7 @@ class GuiTests(unittest.TestCase):
             for w in self.root.winfo_children()
             if isinstance(w, tk.Toplevel) and w is not self.app.review_window
         )
-        entry = next(
-            w for w in window.winfo_children()[0].winfo_children() if isinstance(w, ttk.Entry)
-        )
+        entry = next(w for w in self.descendants(window) if isinstance(w, ttk.Entry))
         entry.delete(0, "end")
         entry.focus_force()
         self.root.update()
@@ -539,6 +537,26 @@ class GuiTests(unittest.TestCase):
             self.app.get_text(self.app.output),
             "Слово ёлка. «Цитата\u00a0точно» https://example.org/",
         )
+
+    def test_optional_review_timeout_shows_first_draft_in_gui_without_error_dialog(self):
+        source = "Сервис осуществляет проверку 10 файлов."
+        self.app.set_source(source)
+        self.app.mode.set("ollama")
+        self.app.configs["ollama"] = self.app.configs["ollama"].__class__(
+            "ollama", "http://localhost:11434", "qwen3.5:4b", timeout=180
+        )
+        self.root.update()
+        client = MagicMock()
+        client.complete.side_effect = ["Сервис проверяет 10 файлов.", ProviderError("timeout")]
+        with patch("shelter_humanizer.gui.Client", return_value=client) as factory:
+            self.app.run("edit")
+            self.wait_for_worker()
+        self.assertEqual(self.errors, [])
+        self.assertEqual(self.app.get_text(self.app.source), source)
+        self.assertEqual(self.app.get_text(self.app.output), "Сервис проверяет 10 файлов.")
+        self.assertTrue(any("вычитка не завершилась" in w for w in self.app.result.warnings))
+        self.assertIs(factory.call_args.kwargs["cancel"], self.app.cancel)
+        self.assertTrue(callable(factory.call_args.kwargs["progress"]))
 
     def test_review_window_does_not_shrink_editors_on_small_screen(self):
         self.root.deiconify()
@@ -774,6 +792,277 @@ class GuiTests(unittest.TestCase):
             self.assertEqual(self.app.mode.get(), "offline")
             runtime.stop.assert_called_once()
             runtime.save_model.assert_not_called()
+
+    def test_manual_output_is_not_overwritten_by_a_late_reply(self):
+        started, finish = threading.Event(), threading.Event()
+        client = MagicMock()
+
+        def complete(messages):
+            started.set()
+            finish.wait(3)
+            return "Сервис проверяет файлы."
+
+        client.complete.side_effect = complete
+        self.app.set_source("Сервис осуществляет проверку файлов.")
+        self.app.mode.set("ollama")
+        self.app.configs["ollama"] = self.app.configs["ollama"].__class__(model="test")
+        self.app.second_pass.set(False)
+        self.root.update()
+        with (
+            patch("shelter_humanizer.gui.Client", return_value=client),
+            patch.object(self.app, "offer_pending_result") as offer,
+        ):
+            self.app.run("edit")
+            self.assertTrue(started.wait(2))
+            self.app.replace_text(self.app.output, "Мои ручные изменения.")
+            self.root.update()
+            finish.set()
+            self.wait_for_worker()
+        self.assertEqual(self.app.get_text(self.app.output), "Мои ручные изменения.")
+        self.assertEqual(self.app.pending_result.text, "Сервис проверяет файлы.")
+        offer.assert_called_once()
+
+    def test_export_keeps_processing_warnings_and_recomputes_manual_comparison(self):
+        client = MagicMock()
+        client.complete.side_effect = ["Цена 200 ₽.", ProviderError("timeout")]
+        from shelter_humanizer.service import rewrite
+
+        self.app.set_source("Цена 200 ₽.")
+        self.app.show_result(rewrite("Цена 200 ₽.", client))
+        report = self.app.current_result()
+        self.assertTrue(any("вычитка не завершилась" in warning for warning in report.warnings))
+        self.app.replace_text(self.app.output, "Цена 300 ₽.")
+        report = self.app.current_result()
+        self.assertIn("manual_edit", report.flags)
+        self.assertTrue(any("числа" in warning for warning in report.warnings))
+        self.assertTrue(any("вычитка не завершилась" in warning for warning in report.warnings))
+
+    def test_setup_actions_remain_visible_with_large_fonts(self):
+        from shelter_humanizer.local_setup import LocalSetup
+
+        original = self.root.tk.call("tk", "scaling")
+        try:
+            self.root.tk.call("tk", "scaling", 2.0)
+            with tempfile.TemporaryDirectory() as directory:
+                wizard = LocalSetup(
+                    self.root,
+                    lambda: self.app.colors,
+                    lambda *args: None,
+                    ManagedRuntime(directory),
+                )
+                wizard.window.attributes("-alpha", 0)
+                wizard.window.transient("")
+                wizard.window.geometry("720x540+10000+10000")
+                wizard.window.deiconify()
+                self.root.update()
+                self.assertTrue(wizard.install_button.winfo_ismapped())
+                self.assertGreater(wizard.install_button.winfo_height(), 10)
+                self.assertTrue(wizard.window.resizable()[1])
+                wizard.close()
+        finally:
+            self.root.tk.call("tk", "scaling", original)
+
+    def test_installer_confirm_stays_inside_small_window_and_wheel_reaches_details(self):
+        from shelter_humanizer.local_setup import LocalSetup
+        from shelter_humanizer.panels import ScrollArea
+
+        original = self.root.tk.call("tk", "scaling")
+        try:
+            for scaling, geometry in (
+                (1.0, "640x480"),
+                (1.5, "540x400"),
+                (2.0, "480x360"),
+                (2.67, "480x360"),
+            ):
+                with self.subTest(scaling=scaling, geometry=geometry):
+                    self.root.tk.call("tk", "scaling", scaling)
+                    with tempfile.TemporaryDirectory() as directory:
+                        wizard = LocalSetup(
+                            self.root,
+                            lambda: self.app.colors,
+                            lambda *args: None,
+                            ManagedRuntime(directory),
+                        )
+                        try:
+                            wizard.window.attributes("-alpha", 0)
+                            wizard.window.transient("")
+                            wizard.window.geometry(geometry + "+10000+10000")
+                            wizard.window.deiconify()
+                            self.root.update()
+                            button = wizard.install_button
+                            self.assertTrue(button.winfo_ismapped())
+                            self.assertEqual(button.winfo_width(), button.winfo_reqwidth())
+                            self.assertGreaterEqual(
+                                button.winfo_rootx(), wizard.window.winfo_rootx()
+                            )
+                            self.assertLessEqual(
+                                button.winfo_rootx() + button.winfo_width(),
+                                wizard.window.winfo_rootx() + wizard.window.winfo_width(),
+                            )
+                            self.assertLessEqual(
+                                button.winfo_rooty() + button.winfo_height(),
+                                wizard.window.winfo_rooty() + wizard.window.winfo_height(),
+                            )
+                            area = next(
+                                w
+                                for w in self.descendants(wizard.window)
+                                if isinstance(w, ScrollArea)
+                            )
+                            start = area.canvas.yview()[0]
+                            area.body.event_generate("<MouseWheel>", delta=-120)
+                            self.root.update()
+                            self.assertGreater(area.canvas.yview()[0], start)
+                            with (
+                                patch.object(wizard, "start") as start_install,
+                                patch(
+                                    "shelter_humanizer.local_setup.messagebox.askyesno",
+                                    return_value=False,
+                                ) as confirmation,
+                            ):
+                                button.invoke()
+                                confirmation.assert_called_once()
+                                start_install.assert_not_called()
+                        finally:
+                            wizard.close()
+        finally:
+            self.root.tk.call("tk", "scaling", original)
+
+    def test_window_close_can_be_cancelled_without_losing_text(self):
+        self.app.set_source("Не потерять текст.")
+        with patch("shelter_humanizer.gui.messagebox.askyesnocancel", return_value=None):
+            self.app.request_close()
+        self.assertFalse(self.app.closed)
+        self.assertEqual(self.app.get_text(self.app.source), "Не потерять текст.")
+
+    def test_source_replacement_requires_confirmation(self):
+        self.app.set_source("Мой исходник.")
+        with patch("shelter_humanizer.gui.messagebox.askyesno", return_value=False):
+            self.assertFalse(self.app.replace_source("Новый текст."))
+        self.assertEqual(self.app.get_text(self.app.source), "Мой исходник.")
+
+    def test_custom_instruction_can_apply_and_reset_without_main_screen_button(self):
+        from shelter_humanizer.preferences import Preferences
+        from shelter_humanizer.prompts import SYSTEM
+
+        with tempfile.TemporaryDirectory() as directory:
+            self.app.preferences = Preferences(Path(directory) / "settings.json")
+            self.app.instruction_settings()
+            window = next(
+                w
+                for w in self.root.winfo_children()
+                if isinstance(w, tk.Toplevel) and "редакторская инструкция" in w.title()
+            )
+            box = next(w for w in self.descendants(window) if isinstance(w, tk.Text))
+            self.assertEqual(self.app.get_text(box), SYSTEM)
+            self.app.replace_text(box, "Используй короткие предложения.")
+            self.button(window, "Применить").invoke()
+            self.assertEqual(self.app.instruction, "Используй короткие предложения.")
+            self.assertFalse(self.app.preferences.path.exists())
+            self.app.instruction_settings()
+            window = next(
+                w
+                for w in self.root.winfo_children()
+                if isinstance(w, tk.Toplevel) and "редакторская инструкция" in w.title()
+            )
+            self.button(window, "Вернуть предустановку").invoke()
+            self.button(window, "Применить").invoke()
+            self.assertIsNone(self.app.instruction)
+
+    def test_custom_instruction_persists_only_after_opt_in_and_reset_deletes_it(self):
+        from shelter_humanizer.preferences import Preferences
+
+        with tempfile.TemporaryDirectory() as directory:
+            self.app.preferences = Preferences(Path(directory) / "settings.json")
+            self.app.instruction_settings()
+            window = next(
+                w
+                for w in self.root.winfo_children()
+                if isinstance(w, tk.Toplevel) and "редакторская инструкция" in w.title()
+            )
+            box = next(w for w in self.descendants(window) if isinstance(w, tk.Text))
+            self.app.replace_text(box, "Не меняй стиль автора.")
+            checkbox = next(w for w in self.descendants(window) if isinstance(w, ttk.Checkbutton))
+            checkbox.invoke()
+            self.button(window, "Применить").invoke()
+            self.assertEqual(self.app.preferences.load()["instruction"], "Не меняй стиль автора.")
+            self.app.instruction_settings()
+            window = next(
+                w
+                for w in self.root.winfo_children()
+                if isinstance(w, tk.Toplevel) and "редакторская инструкция" in w.title()
+            )
+            self.button(window, "Вернуть предустановку").invoke()
+            self.button(window, "Применить").invoke()
+            self.assertFalse(self.app.preferences.path.exists())
+
+    def test_custom_model_requires_confirmation_and_passes_only_validated_tag(self):
+        from shelter_humanizer.local_setup import LocalSetup
+
+        with tempfile.TemporaryDirectory() as directory:
+            wizard = LocalSetup(
+                self.root, lambda: self.app.colors, lambda *args: None, ManagedRuntime(directory)
+            )
+            wizard.notebook.select(1)
+            wizard.custom_name.set("author/editor:q4")
+            with patch.object(wizard, "start") as start:
+                with patch("shelter_humanizer.local_setup.messagebox.askyesno", return_value=False):
+                    wizard.download()
+                    start.assert_not_called()
+                with patch("shelter_humanizer.local_setup.messagebox.askyesno", return_value=True):
+                    wizard.download()
+                    start.assert_called_once_with(
+                        "author/editor:q4", custom=True, gguf=None, installed_only=False
+                    )
+                start.reset_mock()
+                wizard.custom_name.set("https://untrusted.example/model")
+                wizard.download()
+                start.assert_not_called()
+            wizard.close()
+
+    def test_fixed_manual_result_recomputes_completeness_warning(self):
+        source = "В библиотеке готовят встречу с авторами. " * 20
+        self.app.show_result(compare(source, "Встреча состоится.", mode="ai"))
+        self.assertIn("content_shortened", self.app.current_result().flags)
+        self.app.replace_text(self.app.output, source)
+        current = self.app.current_result()
+        self.assertNotIn("content_shortened", current.flags)
+        self.assertFalse(any("сократился" in warning for warning in current.warnings))
+
+    def test_long_document_resumes_in_gui_without_applying_partial_answer(self):
+        source = ("Обычный текст абзаца для редактуры. " * 90 + "\n\n") * 3
+        calls = []
+
+        class Model:
+            config = self.app.configs["ollama"].__class__(model="test")
+
+            def complete(self, prompt):
+                calls.append(prompt)
+                if len(calls) == 2:
+                    raise ProviderError("synthetic failure")
+                return json.loads(prompt[-1]["content"].split("\n", 1)[1])["original"]
+
+        self.app.set_source(source)
+        self.root.update()
+        self.app.replace_text(self.app.output, "Предыдущий результат.")
+        self.app.mode.set("ollama")
+        self.app.configs["ollama"] = Model.config
+        self.app.long_mode.set(True)
+        self.app.second_pass.set(False)
+        with (
+            patch("shelter_humanizer.gui.Client", return_value=Model()),
+            patch("shelter_humanizer.gui.messagebox.askyesno", return_value=True),
+            patch.object(self.app, "error"),
+        ):
+            self.app.run("edit")
+            self.wait_for_worker()
+            self.assertEqual(self.app.get_text(self.app.output), "Предыдущий результат.")
+            self.assertEqual(len(self.app.document_session.results), 1)
+            expected_calls = len(self.app.document_session.parts) + 1
+            self.app.run("edit")
+            self.wait_for_worker()
+        self.assertEqual(len(calls), expected_calls)
+        self.assertEqual(self.app.get_text(self.app.output), source)
+        self.assertIn("chunked", self.app.result.flags)
 
 
 if __name__ == "__main__":

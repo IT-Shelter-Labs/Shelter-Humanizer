@@ -1,5 +1,15 @@
 # Shelter Humanizer
 
+The current checkout prepares **1.1.0rc1**, a local release candidate. It does not
+replace the published Releases download. See [advanced settings](docs/ADVANCED_SETTINGS_RU.md)
+(Russian) and [release notes](docs/RELEASE_NOTES_1.1.0rc1.md).
+
+Optional features live under **Text settings → Advanced**: custom Ollama tags,
+installed models or a compatible single GGUF, an editable instruction with reset
+and opt-in persistence, explicit document chunking with in-memory resume, and
+diagnostics without text or keys. You can still connect your own Ollama/LM Studio/API.
+Defaults stay Qwen 3.5 4B and the evaluated IT Shelter instruction.
+
 **AI text editing and hidden-character cleanup in a simple Windows desktop app.**
 
 [Русский](README.md) · [Download for Windows](https://github.com/IT-Shelter-Labs/Shelter-Humanizer/releases/latest) · [Russian quick start](docs/QUICKSTART_RU.md) · [IT Shelter on Telegram](https://t.me/+txLM4MYbMh9lZDli)
@@ -86,7 +96,9 @@ the current instruction, four local models, blinded machine judgments and study 
 
 DeepSeek R1 0528 is the compact May 2025 release, not the newest full DeepSeek
 series. It reasons before answering; only the final answer becomes edited text.
-CPU generation may exceed the integrated local request timeout of 180 seconds.
+CPU generation can take several minutes. Local responses are streamed with progress
+indication and a 15-minute limit per pass; a 3-minute idle limit still applies.
+If optional proofreading fails, the checked first draft is kept with a warning.
 Start with short input. Model size is not RAM usage or a quality guarantee.
 
 The installer supports **Windows x64, Windows 10 22H2 or newer**. It downloads
