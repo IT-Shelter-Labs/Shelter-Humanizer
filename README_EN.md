@@ -1,15 +1,5 @@
 # Shelter Humanizer
 
-The current checkout prepares **1.1.0rc1**, a local release candidate. It does not
-replace the published Releases download. See [advanced settings](docs/ADVANCED_SETTINGS_RU.md)
-(Russian) and [release notes](docs/RELEASE_NOTES_1.1.0rc1.md).
-
-Optional features live under **Text settings → Advanced**: custom Ollama tags,
-installed models or a compatible single GGUF, an editable instruction with reset
-and opt-in persistence, explicit document chunking with in-memory resume, and
-diagnostics without text or keys. You can still connect your own Ollama/LM Studio/API.
-Defaults stay Qwen 3.5 4B and the evaluated IT Shelter instruction.
-
 **AI text editing and hidden-character cleanup in a simple Windows desktop app.**
 
 [Русский](README.md) · [Download for Windows](https://github.com/IT-Shelter-Labs/Shelter-Humanizer/releases/latest) · [Russian quick start](docs/QUICKSTART_RU.md) · [IT Shelter on Telegram](https://t.me/+txLM4MYbMh9lZDli)
@@ -34,7 +24,7 @@ The app also displays meaning-review warnings to check before copying.
 
 ## Quick start on Windows
 
-1. Open [Releases](https://github.com/IT-Shelter-Labs/Shelter-Humanizer/releases/latest). Under **Assets**, download **`Shelter-Humanizer-1.0.0-windows-x64.zip`**.
+1. Open [Releases](https://github.com/IT-Shelter-Labs/Shelter-Humanizer/releases/latest). Under **Assets**, download **`Shelter-Humanizer-1.1.0-windows-x64.zip`**.
 2. Extract the entire ZIP, then open **`Shelter-Humanizer.exe`**. You do not need to install Python.
 3. For AI editing, select **«Выбрать ИИ» (Choose AI) → «Установить локальный ИИ» (Install local AI)**.
 4. Select a model, click **«Установить и включить ИИ» (Install and enable AI)**, confirm, and wait for the download.
@@ -46,8 +36,16 @@ After setup, local editing works without internet. Prefer 16 GB RAM. Qwen 3 1.7B
 is a smaller option. DeepSeek R1 8B remains available; saved selections are preserved.
 Hardware guidance is approximate, not a measured minimum.
 
-These defaults apply to current `main` after the initial 1.0.0 release. The original
-1.0.0 archive defaults to DeepSeek; the updated build needs a separate release.
+**Upgrading from 1.0.0:** close the old app, extract the new ZIP into a separate
+folder and launch the new EXE. Managed model downloads and explicit saved choices
+are reused. Setup now scrolls and keeps its confirmation button at the bottom.
+[Changes in 1.1.0](docs/RELEASE_NOTES_1.1.0.md).
+
+Optional features live under **Text settings → Advanced**: custom Ollama tags,
+installed models or a compatible single GGUF, an editable instruction with reset
+and opt-in persistence, explicit document chunking with in-memory resume, and
+diagnostics without text or keys. You can still connect your own Ollama/LM Studio/API.
+See [advanced settings](docs/ADVANCED_SETTINGS_RU.md) (Russian).
 
 Do not want to download a model? **«Обработать в ИИ-чате…» (Process in an AI chat)**
 prepares a task for your existing ChatGPT or another chat. Copy the task and paste

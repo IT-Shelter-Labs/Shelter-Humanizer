@@ -154,7 +154,7 @@ def main():
         for name in (
             "ADVANCED_SETTINGS_RU.md",
             "TROUBLESHOOTING_RU.md",
-            "RELEASE_NOTES_1.1.0rc1.md",
+            f"RELEASE_NOTES_{__version__}.md",
         ):
             bundle.write(ROOT / "docs" / name, "docs/" + name)
         bundle.writestr("BUILD_INFO.json", metadata.read_bytes())

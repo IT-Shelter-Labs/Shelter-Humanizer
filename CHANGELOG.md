@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0rc1 (local candidate, not published)
+## 1.1.0 · 2026-10-16
 
 - Optional custom model download/selection/GGUF import and custom editing instruction
   in advanced settings. Defaults and explicit saved model choices remain intact.
@@ -13,7 +13,7 @@
 - Windows instance guard and public build identity. See release notes for limits.
 
 
-## Unreleased — после 1.0.0
+Дополнительно по сравнению с 1.0.0:
 
 - Ollama: потоковое получение ответа с прогрессом, до 15 минут на проход вместо общего трёхминутного лимита; предел простоя GUI/CLI 180 секунд, ограничение размера и проверка завершения сохранены. Отмена прерывает соединение запроса.
 - Сетевая ошибка необязательной ИИ-вычитки сохраняет первую редактуру с предупреждением, очисткой Unicode и повторной проверкой защищённых данных. Отмена и нарушение защищённых данных не маскируются.

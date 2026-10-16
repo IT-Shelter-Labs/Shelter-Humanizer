@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shelter-humanizer"
-version = "1.1.0rc1"
+version = "1.1.0"
 description = "Russian text editor with offline Unicode inspection and optional AI rewriting"
 readme = "README.md"
 requires-python = ">=3.11"

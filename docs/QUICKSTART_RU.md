@@ -5,7 +5,7 @@
 ## 1. Скачать приложение
 
 Откройте [последний релиз](https://github.com/IT-Shelter-Labs/Shelter-Humanizer/releases/latest).
-В разделе **Assets** скачайте `Shelter-Humanizer-1.0.0-windows-x64.zip`.
+В разделе **Assets** скачайте `Shelter-Humanizer-1.1.0-windows-x64.zip`.
 Не выбирайте Source code: там исходники, а не готовая программа.
 
 Нажмите на архив правой кнопкой → «Извлечь всё». Откройте распакованную папку,
